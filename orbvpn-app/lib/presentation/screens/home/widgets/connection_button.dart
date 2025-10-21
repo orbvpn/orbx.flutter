@@ -6,11 +6,11 @@ class ConnectionButton extends StatelessWidget {
   final VoidCallback onPressed;
 
   const ConnectionButton({
-    Key? key,
+    super.key,
     required this.isConnected,
     required this.isConnecting,
     required this.onPressed,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

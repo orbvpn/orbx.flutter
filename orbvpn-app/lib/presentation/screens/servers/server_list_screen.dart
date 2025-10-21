@@ -6,7 +6,7 @@ import '../../../data/models/server.dart';
 import 'widgets/server_card.dart';
 
 class ServerListScreen extends StatefulWidget {
-  const ServerListScreen({Key? key}) : super(key: key);
+  const ServerListScreen({super.key});
 
   @override
   State<ServerListScreen> createState() => _ServerListScreenState();

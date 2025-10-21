@@ -6,7 +6,7 @@ import '../../../core/constants/mimicry_protocols.dart';
 import 'widgets/setting_tile.dart';
 
 class SettingsScreen extends StatefulWidget {
-  const SettingsScreen({Key? key}) : super(key: key);
+  const SettingsScreen({super.key});
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -209,9 +209,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       child: Text(
         title.toUpperCase(),
         style: Theme.of(context).textTheme.titleSmall?.copyWith(
-          color: Colors.grey,
-          fontWeight: FontWeight.bold,
-        ),
+              color: Colors.grey,
+              fontWeight: FontWeight.bold,
+            ),
       ),
     );
   }

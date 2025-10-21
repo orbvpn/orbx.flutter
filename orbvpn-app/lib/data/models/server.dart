@@ -91,15 +91,15 @@ class OrbXServer extends Equatable {
 
   @override
   List<Object?> get props => [
-    id,
-    name,
-    ipAddress,
-    port,
-    location,
-    country,
-    protocols,
-    latencyMs,
-  ];
+        id,
+        name,
+        ipAddress,
+        port,
+        location,
+        country,
+        protocols,
+        latencyMs,
+      ];
 
   OrbXServer copyWith({
     String? id,

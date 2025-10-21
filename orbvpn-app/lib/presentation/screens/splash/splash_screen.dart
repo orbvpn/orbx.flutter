@@ -3,7 +3,7 @@ import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 
 class SplashScreen extends StatefulWidget {
-  const SplashScreen({Key? key}) : super(key: key);
+  const SplashScreen({super.key});
 
   @override
   State<SplashScreen> createState() => _SplashScreenState();
@@ -51,38 +51,37 @@ class _SplashScreenState extends State<SplashScreen> {
           ),
         ),
         child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              // Logo
-              Image.asset('assets/images/logo.png', width: 150, height: 150),
+            child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            // Logo
+            Image.asset('assets/images/logo.png', width: 150, height: 150),
 
-              const SizedBox(height: 24),
+            const SizedBox(height: 24),
 
-              // App name
-              const Text(
-                'OrbVPN',
-                style: TextStyle(
-                  fontSize: 32,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                ),
+            // App name
+            const Text(
+              'OrbVPN',
+              style: TextStyle(
+                fontSize: 32,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
               ),
+            ),
 
-              const SizedBox(height: 8),
+            const SizedBox(height: 8),
 
-              const Text(
-                'Secure. Private. Undetectable.',
-                style: TextStyle(fontSize: 16, color: Colors.white70),
-              ),
+            const Text(
+              'Secure. Private. Undetectable.',
+              style: TextStyle(fontSize: 16, color: Colors.white70),
+            ),
 
-              const SizedBox(height: 48),
+            const SizedBox(height: 48),
 
-              // Loading indicator
-              const CircularProgressIndicator(color: Colors.white),
-            ],
-          ),
-        ),
+            // Loading indicator
+            const CircularProgressIndicator(color: Colors.white),
+          ],
+        )),
       ),
     );
   }

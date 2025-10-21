@@ -7,7 +7,7 @@ import 'widgets/status_indicator.dart';
 import 'widgets/quick_stats.dart';
 
 class HomeScreen extends StatelessWidget {
-  const HomeScreen({Key? key}) : super(key: key);
+  const HomeScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -184,8 +184,8 @@ class HomeScreen extends StatelessWidget {
                     Text(
                       '${server.latencyMs ?? 0}ms',
                       style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                        color: _getLatencyColor(server.latencyMs),
-                      ),
+                            color: _getLatencyColor(server.latencyMs),
+                          ),
                     ),
                   ],
                 ),

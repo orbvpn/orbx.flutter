@@ -5,10 +5,10 @@ class StatusIndicator extends StatelessWidget {
   final bool isConnecting;
 
   const StatusIndicator({
-    Key? key,
+    super.key,
     required this.isConnected,
     required this.isConnecting,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

@@ -16,7 +16,7 @@ import 'presentation/screens/statistics/stats_screen.dart';
 import 'presentation/screens/profile/profile_screen.dart';
 
 class OrbXApp extends StatelessWidget {
-  const OrbXApp({Key? key}) : super(key: key);
+  const OrbXApp({super.key});
 
   @override
   Widget build(BuildContext context) {
