@@ -1,0 +1,16 @@
+target 'Runner' do
+  use_frameworks!
+  use_modular_headers!
+
+  flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
+  
+  # WireGuard
+  pod 'WireGuardKit', '~> 1.0'
+end
+
+target 'PacketTunnel' do
+  use_frameworks!
+  
+  # WireGuard for Network Extension
+  pod 'WireGuardKit', '~> 1.0'
+end
