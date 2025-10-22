@@ -1,4 +1,4 @@
-package com.orbvpn.orbx\n\nclass MainActivity {}\n
+package com.orbvpn.orbx
 
 import android.app.Activity
 import android.content.Intent

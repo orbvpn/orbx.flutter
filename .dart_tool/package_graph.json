@@ -210,12 +210,13 @@
     },
     {
       "name": "flutter_local_notifications",
-      "version": "17.2.4",
+      "version": "19.5.0",
       "dependencies": [
         "clock",
         "flutter",
         "flutter_local_notifications_linux",
         "flutter_local_notifications_platform_interface",
+        "flutter_local_notifications_windows",
         "timezone"
       ]
     },
@@ -913,22 +914,34 @@
     },
     {
       "name": "timezone",
-      "version": "0.9.4",
+      "version": "0.10.1",
       "dependencies": [
+        "http",
         "path"
       ]
     },
     {
       "name": "flutter_local_notifications_platform_interface",
-      "version": "7.2.0",
+      "version": "9.1.0",
       "dependencies": [
-        "flutter",
         "plugin_platform_interface"
       ]
     },
     {
+      "name": "flutter_local_notifications_windows",
+      "version": "1.0.3",
+      "dependencies": [
+        "ffi",
+        "flutter",
+        "flutter_local_notifications_platform_interface",
+        "meta",
+        "timezone",
+        "xml"
+      ]
+    },
+    {
       "name": "flutter_local_notifications_linux",
-      "version": "4.0.1",
+      "version": "6.0.0",
       "dependencies": [
         "dbus",
         "ffi",
@@ -1425,6 +1438,15 @@
       ]
     },
     {
+      "name": "xml",
+      "version": "6.6.1",
+      "dependencies": [
+        "collection",
+        "meta",
+        "petitparser"
+      ]
+    },
+    {
       "name": "xdg_directories",
       "version": "1.1.0",
       "dependencies": [
@@ -1582,15 +1604,6 @@
       ]
     },
     {
-      "name": "xml",
-      "version": "6.6.1",
-      "dependencies": [
-        "collection",
-        "meta",
-        "petitparser"
-      ]
-    },
-    {
       "name": "sqflite_common",
       "version": "2.5.6",
       "dependencies": [
@@ -1632,6 +1645,14 @@
       ]
     },
     {
+      "name": "petitparser",
+      "version": "7.0.1",
+      "dependencies": [
+        "collection",
+        "meta"
+      ]
+    },
+    {
       "name": "platform",
       "version": "3.1.6",
       "dependencies": []
@@ -1640,14 +1661,6 @@
       "name": "isolate_channel",
       "version": "0.2.2+1",
       "dependencies": []
-    },
-    {
-      "name": "petitparser",
-      "version": "7.0.1",
-      "dependencies": [
-        "collection",
-        "meta"
-      ]
     },
     {
       "name": "synchronized",

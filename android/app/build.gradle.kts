@@ -7,7 +7,7 @@ plugins {
 
 android {
     namespace = "com.orbvpn.orbx"
-    compileSdk = 35  // Use 35 instead of 36
+    compileSdk = 36
     ndkVersion = "27.0.12077973"
 
     compileOptions {
@@ -22,7 +22,7 @@ android {
     defaultConfig {
         applicationId = "com.orbvpn.orbx"
         minSdk = 24  // Set explicit minimum
-        targetSdk = 35
+        targetSdk = 36
         versionCode = 1
         versionName = "1.0.0"
     }

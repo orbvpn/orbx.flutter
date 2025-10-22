@@ -36,7 +36,7 @@ dependencies:
   # Firebase (for FCM notifications)
   firebase_core: ^4.2.0
   firebase_messaging: ^16.0.3
-  flutter_local_notifications: ^17.0.0
+  flutter_local_notifications: ^19.5.0
 
   # UI Components
   flutter_spinkit: ^5.2.0

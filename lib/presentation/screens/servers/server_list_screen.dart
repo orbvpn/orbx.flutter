@@ -159,7 +159,7 @@ class _ServerListScreenState extends State<ServerListScreen> {
                     },
                   ),
                 );
-              }).toList(),
+              }),
             ],
           ),
         );

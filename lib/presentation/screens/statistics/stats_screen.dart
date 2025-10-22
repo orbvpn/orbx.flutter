@@ -3,7 +3,7 @@ import 'package:provider/provider.dart';
 import '../../providers/connection_provider.dart';
 
 class StatisticsScreen extends StatefulWidget {
-  const StatisticsScreen({Key? key}) : super(key: key);
+  const StatisticsScreen({super.key});
 
   @override
   State<StatisticsScreen> createState() => _StatisticsScreenState();
