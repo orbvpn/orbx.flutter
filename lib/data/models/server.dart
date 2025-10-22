@@ -43,7 +43,8 @@ class OrbXServer extends Equatable {
       port: json['port'] as int,
       location: json['location'] as String,
       country: json['country'] as String,
-      countryCode: json['countryCode'] as String? ?? '',
+      countryCode:
+          json['country'] as String? ?? '', // ✅ Map 'country' to 'countryCode'
       protocols: (json['protocols'] as List<dynamic>)
           .map((p) => _parseProtocol(p as String))
           .toList(),

@@ -7,6 +7,7 @@ import 'presentation/providers/auth_provider.dart';
 import 'presentation/providers/connection_provider.dart';
 import 'presentation/providers/server_provider.dart';
 import 'presentation/providers/theme_provider.dart';
+import 'presentation/providers/connection_settings_provider.dart'; // ✅
 import 'presentation/theme/app_theme.dart';
 import 'presentation/screens/splash/splash_screen.dart';
 import 'presentation/screens/auth/login_screen.dart';
@@ -15,6 +16,7 @@ import 'presentation/screens/servers/server_list_screen.dart';
 import 'presentation/screens/settings/settings_screen.dart';
 import 'presentation/screens/profile/profile_screen.dart';
 import 'presentation/screens/statistics/stats_screen.dart';
+import 'presentation/screens/settings/connection_settings_screen.dart'; // ✅
 
 class OrbXApp extends StatelessWidget {
   const OrbXApp({super.key});
@@ -39,6 +41,10 @@ class OrbXApp extends StatelessWidget {
         ChangeNotifierProvider(
           create: (_) => ThemeProvider(),
         ),
+        ChangeNotifierProvider(
+          // ✅
+          create: (_) => ConnectionSettingsProvider(getIt())..init(),
+        ),
       ],
       child: Consumer<ThemeProvider>(
         builder: (context, themeProvider, _) {
@@ -57,6 +63,8 @@ class OrbXApp extends StatelessWidget {
               '/settings': (context) => const SettingsScreen(),
               '/profile': (context) => const ProfileScreen(),
               '/statistics': (context) => const StatisticsScreen(),
+              '/connection-settings': (context) =>
+                  const ConnectionSettingsScreen(), // ✅
             },
           );
         },

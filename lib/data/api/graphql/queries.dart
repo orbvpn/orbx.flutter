@@ -42,17 +42,14 @@ class GraphQLQueries {
 
   // Server Management - ✅ FIXED: No enabled/online parameters, added countryCode
   static const String getServers = r'''
-    query GetOrbXServers($sortBy: SortType, $ascending: Boolean) {
-      orbxServers(sortBy: $sortBy, ascending: $ascending) {
+    query GetOrbXServers {
+      orbxServers {
         id
         name
         ipAddress
         port
         location
         country
-        countryCode
-        region
-        hostname
         protocols
         quantumSafe
         currentConnections

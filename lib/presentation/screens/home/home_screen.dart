@@ -274,7 +274,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       icon: Icons.swap_horiz,
                       title: 'Protocols',
                       onTap: () {
-                        Navigator.pushNamed(context, '/protocols');
+                        Navigator.pushNamed(context, '/connection-settings');
                       },
                     ),
                     _QuickActionCard(

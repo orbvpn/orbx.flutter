@@ -12,19 +12,28 @@ class ServerRepository {
 
   ServerRepository(this._networkAnalyzer);
 
-  // Fetch all available servers from OrbNet API
+// Fetch all available servers from OrbNet API
   Future<List<OrbXServer>> getAvailableServers() async {
     try {
       final data = await _graphql.query(GraphQLQueries.getServers);
 
+      print('🔍 DEBUG: Query response data: $data'); // ✅ Add this
+
       final serversJson = data['orbxServers'] as List<dynamic>;
+
+      print('🔍 DEBUG: Server count: ${serversJson.length}'); // ✅ Add this
+      print(
+          '🔍 DEBUG: First server (if any): ${serversJson.isNotEmpty ? serversJson.first : "EMPTY"}'); // ✅ Add this
 
       _cachedServers = serversJson
           .map((json) => OrbXServer.fromJson(json as Map<String, dynamic>))
           .toList();
 
+      print('🔍 DEBUG: Parsed ${_cachedServers.length} servers'); // ✅ Add this
+
       return _cachedServers;
     } catch (e) {
+      print('❌ DEBUG: Error fetching servers: $e'); // ✅ Add this
       throw Exception('Failed to fetch servers: $e');
     }
   }
