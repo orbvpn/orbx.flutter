@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "215771191022",
+    "project_id": "ndb-inc---ga4",
+    "storage_bucket": "ndb-inc---ga4.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:215771191022:android:aa21e4b5bdeeb9cab005ff",
+        "android_client_info": {
+          "package_name": "com.orbvpn.android"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBXukekHvKzvZ3kkXKmXoc1EUA1OnMy2LI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:215771191022:android:6cd77ee3a2a3d2d4b005ff",
+        "android_client_info": {
+          "package_name": "com.orbvpn.orbx"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBXukekHvKzvZ3kkXKmXoc1EUA1OnMy2LI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -1,6 +1,6 @@
 class ApiConstants {
   // OrbNet GraphQL API
-  static const String orbnetEndpoint = 'https://api.orbvpn.com/graphql';
+  static const String orbnetEndpoint = 'https://orbnet.xyz/graphql';
 
   // OrbX servers use HTTPS on port 8443
   static const int orbxPort = 8443;
