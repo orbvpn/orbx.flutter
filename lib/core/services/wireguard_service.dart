@@ -25,7 +25,7 @@ class WireGuardService {
       final publicKey = keypair['publicKey']!;
 
       // 2. Get JWT token
-      final token = await _authRepo.getToken();
+      final token = await _authRepo.getAccessToken();
       if (token == null) {
         throw Exception('Not authenticated');
       }
@@ -83,7 +83,7 @@ class WireGuardService {
       await WireGuardChannel.disconnect();
 
       // 2. Notify server
-      final token = await _authRepo.getToken();
+      final token = await _authRepo.getAccessToken();
       if (token != null) {
         await _dio.post(
           'https://${server.ipAddress}:${server.port}/wireguard/disconnect',

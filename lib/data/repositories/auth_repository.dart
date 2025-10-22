@@ -37,6 +37,13 @@ class AuthRepository {
     return await _graphQLService.isAuthenticated();
   }
 
+  /// Get the current access token
+  ///
+  /// Returns the JWT access token if available, null otherwise
+  Future<String?> getAccessToken() async {
+    return await _graphQLService.getAccessToken();
+  }
+
   /// Login with email and password
   ///
   /// Returns [AuthResponse] containing tokens and user info

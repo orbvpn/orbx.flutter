@@ -22,7 +22,7 @@ class MimicryManager {
     MimicryProtocol protocol,
   ) async {
     try {
-      final token = await _authRepo.getToken();
+      final token = await _authRepo.getAccessToken();
       if (token == null) {
         return ProtocolStatus.unknown;
       }
@@ -165,7 +165,7 @@ class MimicryManager {
     MimicryProtocol protocol,
     List<int> data,
   ) async {
-    final token = await _authRepo.getToken();
+    final token = await _authRepo.getAccessToken();
     if (token == null) throw Exception('Not authenticated');
 
     try {

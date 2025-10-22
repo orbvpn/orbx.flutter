@@ -32,18 +32,22 @@ class GraphQLService {
       },
     );
 
-    // Error link for handling errors
+// Error link for handling errors
     final errorLink = ErrorLink(
       onException: (request, forward, exception) {
         _logger.e('GraphQL Exception: ${exception.toString()}');
+
+        // Log specific error types for better debugging
+        if (exception is NetworkException) {
+          _logger.e('Network error occurred');
+        } else if (exception is ServerException) {
+          _logger.e('Server error occurred');
+        }
+
         return forward(request);
       },
       onGraphQLError: (request, forward, response) {
         _logger.e('GraphQL Error: ${response.errors}');
-        return forward(request);
-      },
-      onNetworkError: (request, forward, exception) {
-        _logger.e('Network Error: ${exception.toString()}');
         return forward(request);
       },
     );

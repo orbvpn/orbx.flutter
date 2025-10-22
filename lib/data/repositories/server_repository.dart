@@ -15,13 +15,9 @@ class ServerRepository {
   // Fetch all available servers from OrbNet API
   Future<List<OrbXServer>> getAvailableServers() async {
     try {
-      final result = await _graphql.query(GraphQLQueries.getServers);
+      final data = await _graphql.query(GraphQLQueries.getServers);
 
-      if (result.hasException) {
-        throw Exception(result.exception.toString());
-      }
-
-      final serversJson = result.data?['orbxServers'] as List<dynamic>;
+      final serversJson = data['orbxServers'] as List<dynamic>;
 
       _cachedServers = serversJson
           .map((json) => OrbXServer.fromJson(json as Map<String, dynamic>))
@@ -37,10 +33,10 @@ class ServerRepository {
   Future<OrbXServer?> getBestServer() async {
     try {
       // Try GraphQL API first (it has server-side logic)
-      final result = await _graphql.query(GraphQLQueries.getBestServer);
+      final data = await _graphql.query(GraphQLQueries.getBestServer);
 
-      if (!result.hasException && result.data != null) {
-        final serverJson = result.data!['bestOrbXServer'];
+      final serverJson = data['bestOrbXServer'];
+      if (serverJson != null) {
         return OrbXServer.fromJson(serverJson as Map<String, dynamic>);
       }
 
@@ -51,23 +47,23 @@ class ServerRepository {
 
       return await _networkAnalyzer.findBestServer(_cachedServers);
     } catch (e) {
-      throw Exception('Failed to get best server: $e');
+      // If API call fails, fallback to client-side selection
+      if (_cachedServers.isEmpty) {
+        await getAvailableServers();
+      }
+      return await _networkAnalyzer.findBestServer(_cachedServers);
     }
   }
 
   // Get server by ID
   Future<OrbXServer?> getServerById(String id) async {
     try {
-      final result = await _graphql.query(
+      final data = await _graphql.query(
         GraphQLQueries.getServerById,
         variables: {'id': id},
       );
 
-      if (result.hasException) {
-        return null;
-      }
-
-      final serverJson = result.data?['orbxServer'];
+      final serverJson = data['orbxServer'];
       if (serverJson == null) return null;
 
       return OrbXServer.fromJson(serverJson as Map<String, dynamic>);

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:intl/intl.dart';
 import '../../providers/auth_provider.dart';
 
 class ProfileScreen extends StatelessWidget {
@@ -87,7 +88,7 @@ class ProfileScreen extends StatelessWidget {
                         if (user.subscription!.expiryDate != null)
                           _buildInfoRow(
                             'Expires',
-                            user.subscription!.expiryDate!,
+                            _formatDate(user.subscription!.expiryDate!),
                           ),
                       ],
                     ),
@@ -145,5 +146,10 @@ class ProfileScreen extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  /// Format DateTime to readable string
+  String _formatDate(DateTime date) {
+    return DateFormat('MMM dd, yyyy').format(date);
   }
 }
