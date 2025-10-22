@@ -261,7 +261,7 @@
     },
     {
       "name": "flutter",
-      "rootUri": "file:///Users/nima/Developments/flutter/packages/flutter",
+      "rootUri": "file:///Users/nima/developments/flutter/packages/flutter",
       "packageUri": "lib/",
       "languageVersion": "3.8"
     },
@@ -351,13 +351,13 @@
     },
     {
       "name": "flutter_test",
-      "rootUri": "file:///Users/nima/Developments/flutter/packages/flutter_test",
+      "rootUri": "file:///Users/nima/developments/flutter/packages/flutter_test",
       "packageUri": "lib/",
       "languageVersion": "3.8"
     },
     {
       "name": "flutter_web_plugins",
-      "rootUri": "file:///Users/nima/Developments/flutter/packages/flutter_web_plugins",
+      "rootUri": "file:///Users/nima/developments/flutter/packages/flutter_web_plugins",
       "packageUri": "lib/",
       "languageVersion": "3.8"
     },
@@ -843,7 +843,7 @@
     },
     {
       "name": "sky_engine",
-      "rootUri": "file:///Users/nima/Developments/flutter/bin/cache/pkg/sky_engine",
+      "rootUri": "file:///Users/nima/developments/flutter/bin/cache/pkg/sky_engine",
       "packageUri": "lib/",
       "languageVersion": "3.8"
     },
@@ -1036,7 +1036,7 @@
   ],
   "generator": "pub",
   "generatorVersion": "3.9.2",
-  "flutterRoot": "file:///Users/nima/Developments/flutter",
+  "flutterRoot": "file:///Users/nima/developments/flutter",
   "flutterVersion": "3.35.6",
   "pubCache": "file:///Users/nima/.pub-cache"
 }
