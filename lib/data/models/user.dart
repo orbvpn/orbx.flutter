@@ -41,11 +41,17 @@ class User extends Equatable {
 
   /// Factory constructor from JSON
   factory User.fromJson(Map<String, dynamic> json) {
+    // ✅ FIX: Backend has nested profile structure
+    final profile = json['profile'] as Map<String, dynamic>?;
+
     return User(
-      id: json['id'] as String,
+      id: json['id'].toString(), // ✅ Convert int to string (backend sends Int)
       email: json['email'] as String,
-      firstName: json['firstName'] as String?,
-      lastName: json['lastName'] as String?,
+
+      // ✅ FIX: firstName/lastName are nested in profile object
+      firstName: profile?['firstName'] as String?,
+      lastName: profile?['lastName'] as String?,
+
       subscription: json['subscription'] != null
           ? UserSubscription.fromJson(
               json['subscription'] as Map<String, dynamic>)
@@ -64,8 +70,10 @@ class User extends Equatable {
     return {
       'id': id,
       'email': email,
-      'firstName': firstName,
-      'lastName': lastName,
+      'profile': {
+        'firstName': firstName,
+        'lastName': lastName,
+      },
       'subscription': subscription?.toJson(),
       'createdAt': createdAt?.toIso8601String(),
       'updatedAt': updatedAt?.toIso8601String(),
@@ -139,25 +147,37 @@ class UserSubscription extends Equatable {
 
   /// Factory constructor from JSON
   factory UserSubscription.fromJson(Map<String, dynamic> json) {
+    // ✅ FIX: Backend has nested group structure
+    final group = json['group'] as Map<String, dynamic>?;
+
     return UserSubscription(
-      id: json['id'] as String,
-      planName: json['planName'] as String,
-      maxDevices: json['maxDevices'] as int,
-      expiryDate: json['expiryDate'] != null
-          ? DateTime.parse(json['expiryDate'] as String)
+      // ✅ id comes from group.id
+      id: group?['id']?.toString() ?? '0',
+      // ✅ planName comes from group.name
+      planName: group?['name'] as String? ?? 'Unknown Plan',
+      // ✅ maxDevices is called multiLoginCount in backend
+      maxDevices: json['multiLoginCount'] as int? ?? 1,
+
+      expiryDate: json['expiresAt'] != null
+          ? DateTime.parse(json['expiresAt'] as String)
           : null,
-      isActive: json['isActive'] as bool? ?? true,
+
+      // Calculate if active based on expiry date
+      isActive: json['expiresAt'] != null
+          ? DateTime.parse(json['expiresAt'] as String).isAfter(DateTime.now())
+          : true,
     );
   }
 
   /// Convert to JSON
   Map<String, dynamic> toJson() {
     return {
-      'id': id,
-      'planName': planName,
-      'maxDevices': maxDevices,
-      'expiryDate': expiryDate?.toIso8601String(),
-      'isActive': isActive,
+      'group': {
+        'id': int.tryParse(id) ?? 0,
+        'name': planName,
+      },
+      'multiLoginCount': maxDevices,
+      'expiresAt': expiryDate?.toIso8601String(),
     };
   }
 

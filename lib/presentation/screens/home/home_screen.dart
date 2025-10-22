@@ -6,8 +6,12 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../providers/auth_provider.dart';
+import '../../providers/connection_provider.dart'
+    as vpn; // ✅ Use prefix to avoid conflict
+import '../../providers/server_provider.dart';
 import '../../theme/colors.dart';
 import '../../../core/constants/app_constants.dart';
+import '../../../data/models/server.dart'; // ✅ Import OrbXServer
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -27,16 +31,13 @@ class _HomeScreenState extends State<HomeScreen> {
           IconButton(
             icon: const Icon(Icons.settings_outlined),
             onPressed: () {
-              // TODO: Navigate to settings
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Settings coming soon!')),
-              );
+              Navigator.pushNamed(context, '/settings');
             },
           ),
         ],
       ),
-      body: Consumer<AuthProvider>(
-        builder: (context, authProvider, child) {
+      body: Consumer2<AuthProvider, vpn.ConnectionProvider>(
+        builder: (context, authProvider, connectionProvider, child) {
           final user = authProvider.currentUser;
 
           return SingleChildScrollView(
@@ -75,55 +76,44 @@ class _HomeScreenState extends State<HomeScreen> {
                                         Theme.of(context).textTheme.bodyMedium,
                                   ),
                                   Text(
-                                    user?.fullName ?? 'User',
-                                    style:
-                                        Theme.of(context).textTheme.titleLarge,
+                                    user?.fullName ?? user?.email ?? 'User',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .titleLarge
+                                        ?.copyWith(
+                                          fontWeight: FontWeight.bold,
+                                        ),
                                   ),
                                 ],
                               ),
                             ),
                           ],
                         ),
-                        if (user?.subscription != null) ...[
+                        if (user?.hasActiveSubscription == true) ...[
                           const SizedBox(height: 16),
-                          const Divider(),
-                          const SizedBox(height: 16),
-
-                          // Subscription Info
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'Plan',
-                                    style:
-                                        Theme.of(context).textTheme.bodySmall,
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: AppColors.success.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(
+                                  Icons.check_circle,
+                                  color: AppColors.success,
+                                  size: 20,
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Premium Active',
+                                  style: TextStyle(
+                                    color: AppColors.success,
+                                    fontWeight: FontWeight.w600,
                                   ),
-                                  Text(
-                                    user!.subscription!.planName,
-                                    style:
-                                        Theme.of(context).textTheme.titleMedium,
-                                  ),
-                                ],
-                              ),
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.end,
-                                children: [
-                                  Text(
-                                    'Devices',
-                                    style:
-                                        Theme.of(context).textTheme.bodySmall,
-                                  ),
-                                  Text(
-                                    '${user.subscription!.maxDevices} max',
-                                    style:
-                                        Theme.of(context).textTheme.titleMedium,
-                                  ),
-                                ],
-                              ),
-                            ],
+                                ),
+                              ],
+                            ),
                           ),
                         ],
                       ],
@@ -136,25 +126,26 @@ class _HomeScreenState extends State<HomeScreen> {
                 // Connection Status Card
                 Card(
                   child: Padding(
-                    padding: const EdgeInsets.all(24.0),
+                    padding: const EdgeInsets.all(32.0),
                     child: Column(
                       children: [
-                        // Status Icon
+                        // Connection Icon
                         Container(
                           width: 120,
                           height: 120,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            color: AppColors.idle.withOpacity(0.2),
+                            color: _getStatusColor(connectionProvider.state)
+                                .withOpacity(0.1),
                             border: Border.all(
-                              color: AppColors.idle,
+                              color: _getStatusColor(connectionProvider.state),
                               width: 4,
                             ),
                           ),
                           child: Icon(
-                            Icons.shield_outlined,
+                            _getStatusIcon(connectionProvider.state),
                             size: 60,
-                            color: AppColors.idle,
+                            color: _getStatusColor(connectionProvider.state),
                           ),
                         ),
 
@@ -162,44 +153,100 @@ class _HomeScreenState extends State<HomeScreen> {
 
                         // Status Text
                         Text(
-                          'Not Connected',
+                          _getStatusText(connectionProvider.state),
                           style: Theme.of(context).textTheme.headlineMedium,
                         ),
 
                         const SizedBox(height: 8),
 
-                        Text(
-                          'Tap connect to secure your connection',
-                          style:
-                              Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                    color: AppColors.textSecondary,
-                                  ),
-                          textAlign: TextAlign.center,
-                        ),
+                        // Server Info (if connected)
+                        if (connectionProvider.isConnected &&
+                            connectionProvider.currentServer != null)
+                          Text(
+                            'Connected to ${connectionProvider.currentServer!.name}',
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodyMedium
+                                ?.copyWith(
+                                  color: AppColors.textSecondary,
+                                ),
+                            textAlign: TextAlign.center,
+                          )
+                        else
+                          Text(
+                            connectionProvider.isConnecting
+                                ? 'Please wait...'
+                                : 'Tap connect to secure your connection',
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodyMedium
+                                ?.copyWith(
+                                  color: AppColors.textSecondary,
+                                ),
+                            textAlign: TextAlign.center,
+                          ),
 
                         const SizedBox(height: 32),
 
-                        // Connect Button
+                        // Connect/Disconnect Button
                         ElevatedButton(
-                          onPressed: () {
-                            // TODO: Implement connection
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('VPN connection coming soon!'),
-                              ),
-                            );
-                          },
+                          onPressed: connectionProvider.isConnecting ||
+                                  connectionProvider.isDisconnecting
+                              ? null
+                              : () => _handleConnectionToggle(
+                                    context,
+                                    connectionProvider,
+                                  ),
                           style: ElevatedButton.styleFrom(
                             padding: const EdgeInsets.symmetric(
                               horizontal: 48,
                               vertical: 20,
                             ),
+                            backgroundColor: connectionProvider.isConnected
+                                ? AppColors.error
+                                : AppColors.primary,
                           ),
-                          child: const Text(
-                            'Connect',
-                            style: TextStyle(fontSize: 18),
+                          child: Text(
+                            connectionProvider.isConnecting
+                                ? 'Connecting...'
+                                : connectionProvider.isDisconnecting
+                                    ? 'Disconnecting...'
+                                    : connectionProvider.isConnected
+                                        ? 'Disconnect'
+                                        : 'Connect',
+                            style: const TextStyle(fontSize: 18),
                           ),
                         ),
+
+                        // Show error if any
+                        if (connectionProvider.errorMessage != null) ...[
+                          const SizedBox(height: 16),
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: AppColors.error.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(
+                                  Icons.error_outline,
+                                  color: AppColors.error,
+                                  size: 20,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    connectionProvider.errorMessage!,
+                                    style: const TextStyle(
+                                      color: AppColors.error,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   ),
@@ -219,20 +266,29 @@ class _HomeScreenState extends State<HomeScreen> {
                       icon: Icons.dns_outlined,
                       title: 'Servers',
                       onTap: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                              content: Text('Server list coming soon!')),
-                        );
+                        // ✅ Navigate to actual server list screen
+                        Navigator.pushNamed(context, '/servers');
                       },
                     ),
                     _QuickActionCard(
-                      icon: Icons.bar_chart_outlined,
+                      icon: Icons.swap_horiz,
+                      title: 'Protocols',
+                      onTap: () {
+                        Navigator.pushNamed(context, '/protocols');
+                      },
+                    ),
+                    _QuickActionCard(
+                      icon: Icons.bar_chart,
                       title: 'Statistics',
                       onTap: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                              content: Text('Statistics coming soon!')),
-                        );
+                        Navigator.pushNamed(context, '/statistics');
+                      },
+                    ),
+                    _QuickActionCard(
+                      icon: Icons.person_outline,
+                      title: 'Profile',
+                      onTap: () {
+                        Navigator.pushNamed(context, '/profile');
                       },
                     ),
                   ],
@@ -243,7 +299,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 // Logout Button
                 OutlinedButton.icon(
                   onPressed: () async {
-                    // Show confirmation dialog
                     final shouldLogout = await showDialog<bool>(
                       context: context,
                       builder: (context) => AlertDialog(
@@ -266,6 +321,11 @@ class _HomeScreenState extends State<HomeScreen> {
                     );
 
                     if (shouldLogout == true && mounted) {
+                      // Disconnect VPN first if connected
+                      if (connectionProvider.isConnected) {
+                        await connectionProvider.disconnect();
+                      }
+
                       await authProvider.logout();
                       if (mounted) {
                         Navigator.of(context).pushReplacementNamed('/login');
@@ -285,6 +345,99 @@ class _HomeScreenState extends State<HomeScreen> {
         },
       ),
     );
+  }
+
+  // Handle connection toggle
+  Future<void> _handleConnectionToggle(
+    BuildContext context,
+    vpn.ConnectionProvider connectionProvider,
+  ) async {
+    if (connectionProvider.isConnected) {
+      // Disconnect
+      await connectionProvider.disconnect();
+    } else {
+      // Connect - need to select server first
+      final serverProvider = context.read<ServerProvider>();
+
+      // Load servers if not already loaded
+      if (serverProvider.servers.isEmpty) {
+        await serverProvider.loadServers();
+      }
+
+      // Get best server
+      OrbXServer? server;
+      try {
+        server = await context.read<ServerProvider>().getBestServer();
+      } catch (e) {
+        // Fallback to first available server
+        if (serverProvider.servers.isNotEmpty) {
+          server = serverProvider.servers.first;
+        }
+      }
+
+      if (server == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content:
+                  Text('No servers available. Please check your connection.'),
+              backgroundColor: AppColors.error,
+            ),
+          );
+        }
+        return;
+      }
+
+      // Connect to server
+      await connectionProvider.connect(server: server);
+    }
+  }
+
+  // Helper methods for UI
+  Color _getStatusColor(vpn.ConnectionState state) {
+    switch (state) {
+      case vpn.ConnectionState.connected:
+        return AppColors.success;
+      case vpn.ConnectionState.connecting:
+      case vpn.ConnectionState.disconnecting:
+        return AppColors.warning;
+      case vpn.ConnectionState.error:
+        return AppColors.error;
+      case vpn.ConnectionState.disconnected:
+      default:
+        return AppColors.idle;
+    }
+  }
+
+  IconData _getStatusIcon(vpn.ConnectionState state) {
+    switch (state) {
+      case vpn.ConnectionState.connected:
+        return Icons.shield;
+      case vpn.ConnectionState.connecting:
+      case vpn.ConnectionState.disconnecting:
+        return Icons.sync;
+      case vpn.ConnectionState.error:
+        return Icons.error_outline;
+      case vpn.ConnectionState.disconnected:
+      default:
+        return Icons.shield_outlined;
+    }
+  }
+
+  String _getStatusText(vpn.ConnectionState state) {
+    switch (state) {
+      case vpn.ConnectionState.connected:
+        return 'Connected';
+      case vpn.ConnectionState.connecting:
+        return 'Connecting...';
+      case vpn.ConnectionState.disconnecting:
+        return 'Disconnecting...';
+      case vpn.ConnectionState.error:
+        return 'Connection Error';
+      case vpn.ConnectionState.disconnected:
+      default:
+        return 'Not Connected';
+    }
   }
 }
 

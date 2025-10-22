@@ -9,12 +9,12 @@ import 'user.dart';
 
 class AuthResponse extends Equatable {
   final String accessToken;
-  final String refreshToken;
+  final String? refreshToken; // ✅ Now optional
   final User user;
 
   const AuthResponse({
     required this.accessToken,
-    required this.refreshToken,
+    this.refreshToken, // ✅ Now optional
     required this.user,
   });
 
@@ -23,7 +23,7 @@ class AuthResponse extends Equatable {
     final loginData = json['login'] as Map<String, dynamic>;
     return AuthResponse(
       accessToken: loginData['accessToken'] as String,
-      refreshToken: loginData['refreshToken'] as String,
+      refreshToken: loginData['refreshToken'] as String?, // ✅ Can be null
       user: User.fromJson(loginData['user'] as Map<String, dynamic>),
     );
   }
@@ -33,7 +33,7 @@ class AuthResponse extends Equatable {
     final registerData = json['register'] as Map<String, dynamic>;
     return AuthResponse(
       accessToken: registerData['accessToken'] as String,
-      refreshToken: registerData['refreshToken'] as String,
+      refreshToken: registerData['refreshToken'] as String?, // ✅ Can be null
       user: User.fromJson(registerData['user'] as Map<String, dynamic>),
     );
   }
@@ -42,7 +42,7 @@ class AuthResponse extends Equatable {
   factory AuthResponse.fromJson(Map<String, dynamic> json) {
     return AuthResponse(
       accessToken: json['accessToken'] as String,
-      refreshToken: json['refreshToken'] as String,
+      refreshToken: json['refreshToken'] as String?, // ✅ Can be null
       user: User.fromJson(json['user'] as Map<String, dynamic>),
     );
   }
@@ -51,7 +51,8 @@ class AuthResponse extends Equatable {
   Map<String, dynamic> toJson() {
     return {
       'accessToken': accessToken,
-      'refreshToken': refreshToken,
+      if (refreshToken != null)
+        'refreshToken': refreshToken, // ✅ Only if exists
       'user': user.toJson(),
     };
   }

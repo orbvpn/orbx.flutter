@@ -164,17 +164,23 @@ class GraphQLService {
   }
 
   /// Save authentication token to secure storage
-  Future<void> saveToken(String accessToken, String refreshToken) async {
+  Future<void> saveToken(String accessToken, [String? refreshToken]) async {
     try {
       await _storage.write(
         key: ApiConstants.accessTokenKey,
         value: accessToken,
       );
-      await _storage.write(
-        key: ApiConstants.refreshTokenKey,
-        value: refreshToken,
-      );
-      _logger.i('Tokens saved to secure storage');
+
+      // Only save refresh token if provided
+      if (refreshToken != null && refreshToken.isNotEmpty) {
+        await _storage.write(
+          key: ApiConstants.refreshTokenKey,
+          value: refreshToken,
+        );
+        _logger.i('Access token and refresh token saved to secure storage');
+      } else {
+        _logger.i('Access token saved to secure storage (no refresh token)');
+      }
     } catch (e) {
       _logger.e('Error saving tokens: $e');
       rethrow;

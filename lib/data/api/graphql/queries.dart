@@ -4,17 +4,20 @@ class GraphQLQueries {
     mutation Login($email: String!, $password: String!) {
       login(email: $email, password: $password) {
         accessToken
-        refreshToken
         user {
           id
           email
-          firstName
-          lastName
+          profile {
+            firstName
+            lastName
+          }
           subscription {
-            id
-            planName
-            maxDevices
-            expiryDate
+            group {
+              id
+              name
+            }
+            multiLoginCount
+            expiresAt
           }
         }
       }
@@ -25,21 +28,22 @@ class GraphQLQueries {
     mutation Register($input: UserInput!) {
       register(input: $input) {
         accessToken
-        refreshToken
         user {
           id
           email
-          firstName
-          lastName
+          profile {
+            firstName
+            lastName
+          }
         }
       }
     }
   ''';
 
-  // Server Management
+  // Server Management - ✅ FIXED: No enabled/online parameters, added countryCode
   static const String getServers = r'''
-    query GetOrbXServers {
-      orbxServers(enabled: true, online: true) {
+    query GetOrbXServers($sortBy: SortType, $ascending: Boolean) {
+      orbxServers(sortBy: $sortBy, ascending: $ascending) {
         id
         name
         ipAddress
@@ -47,6 +51,8 @@ class GraphQLQueries {
         location
         country
         countryCode
+        region
+        hostname
         protocols
         quantumSafe
         currentConnections
@@ -58,6 +64,7 @@ class GraphQLQueries {
     }
   ''';
 
+  // ✅ FIXED: Best server query
   static const String getBestServer = r'''
     query GetBestOrbXServer {
       bestOrbXServer {
@@ -67,26 +74,27 @@ class GraphQLQueries {
         port
         location
         country
+        countryCode
+        region
+        hostname
         protocols
         latencyMs
       }
     }
   ''';
 
+  // ✅ FIXED: Server by ID
   static const String getServerById = r'''
     query GetOrbXServer($id: ID!) {
-      orbxServer(id: $id) {
-        id
-        name
-        ipAddress
+      orbxConfig(serverId: $id) {
+        serverId
+        endpoint
         port
-        location
-        country
+        publicKey
         protocols
+        tlsFingerprint
         quantumSafe
-        currentConnections
-        maxConnections
-        latencyMs
+        region
       }
     }
   ''';
@@ -129,15 +137,20 @@ class GraphQLQueries {
   // User Profile
   static const String getProfile = r'''
     query GetUserProfile {
-      me {
+      getUserInfo {
         id
         email
-        firstName
-        lastName
+        profile {
+          firstName
+          lastName
+        }
         subscription {
-          planName
-          maxDevices
-          expiryDate
+          group {
+            id
+            name
+          }
+          multiLoginCount
+          expiresAt
         }
       }
     }
