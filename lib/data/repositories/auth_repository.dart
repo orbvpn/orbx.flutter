@@ -1,98 +1,53 @@
-class User {
-  final String id;
-  final String email;
-  final String? firstName;
-  final String? lastName;
-  final Subscription? subscription;
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import '../api/graphql/queries.dart';
+import '../api/graphql/client.dart';
+import '../models/user.dart';
 
-  User({
-    required this.id,
-    required this.email,
-    this.firstName,
-    this.lastName,
-    this.subscription,
-  });
+class AuthRepository {
+  final GraphQLService _graphql = GraphQLService.instance;
+  final _storage = const FlutterSecureStorage();
 
-  factory User.fromJson(Map<String, dynamic> json) {
-    return User(
-      id: json['id'] as String,
-      email: json['email'] as String,
-      firstName: json['firstName'] as String?,
-      lastName: json['lastName'] as String?,
-      subscription: json['subscription'] != null
-          ? Subscription.fromJson(json['subscription'] as Map<String, dynamic>)
-          : null,
-    );
+  Future<AuthResponse> login(String email, String password) async {
+    try {
+      final result = await _graphql.mutate(
+        GraphQLQueries.login,
+        variables: {
+          'email': email,
+          'password': password,
+        },
+      );
+
+      if (result.hasException) {
+        throw Exception(result.exception.toString());
+      }
+
+      final data = result.data!['login'];
+
+      // Store tokens
+      await _storage.write(key: 'jwt_token', value: data['accessToken']);
+      await _storage.write(key: 'refresh_token', value: data['refreshToken']);
+
+      // Refresh GraphQL client with new token
+      _graphql.refreshClient();
+
+      return AuthResponse.fromJson(data);
+    } catch (e) {
+      throw Exception('Login failed: $e');
+    }
   }
 
-  Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'email': email,
-      'firstName': firstName,
-      'lastName': lastName,
-      'subscription': subscription?.toJson(),
-    };
-  }
-}
-
-class Subscription {
-  final String id;
-  final String planName;
-  final int maxDevices;
-  final String? expiryDate;
-
-  Subscription({
-    required this.id,
-    required this.planName,
-    required this.maxDevices,
-    this.expiryDate,
-  });
-
-  factory Subscription.fromJson(Map<String, dynamic> json) {
-    return Subscription(
-      id: json['id'] as String,
-      planName: json['planName'] as String,
-      maxDevices: json['maxDevices'] as int,
-      expiryDate: json['expiryDate'] as String?,
-    );
+  Future<void> logout() async {
+    await _storage.delete(key: 'jwt_token');
+    await _storage.delete(key: 'refresh_token');
+    _graphql.refreshClient();
   }
 
-  Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'planName': planName,
-      'maxDevices': maxDevices,
-      'expiryDate': expiryDate,
-    };
-  }
-}
-
-// AuthResponse class for login/register responses
-class AuthResponse {
-  final String accessToken;
-  final String refreshToken;
-  final User user;
-
-  AuthResponse({
-    required this.accessToken,
-    required this.refreshToken,
-    required this.user,
-  });
-
-  factory AuthResponse.fromJson(Map<String, dynamic> json) {
-    return AuthResponse(
-      accessToken: json['accessToken'] as String,
-      refreshToken: json['refreshToken'] as String,
-      user: User.fromJson(json['user'] as Map<String, dynamic>),
-    );
+  Future<bool> isLoggedIn() async {
+    final token = await _storage.read(key: 'jwt_token');
+    return token != null && token.isNotEmpty;
   }
 
-  Map<String, dynamic> toJson() {
-    return {
-      'accessToken': accessToken,
-      'refreshToken': refreshToken,
-      'user': user.toJson(),
-    };
+  Future<String?> getToken() async {
+    return await _storage.read(key: 'jwt_token');
   }
 }
