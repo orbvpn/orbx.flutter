@@ -18,7 +18,7 @@ val flutterVersionName = localProperties.getProperty("flutter.versionName") ?: "
 
 android {
     namespace = "com.orbvpn.orbx"
-    compileSdk = 36  // ✅ Updated to 36
+    compileSdk = 36
 
     compileOptions {
         // Enable core library desugaring
@@ -34,7 +34,7 @@ android {
 
     defaultConfig {
         applicationId = "com.orbvpn.orbx"
-        minSdk = flutter.minSdkVersion
+        minSdk = 21
         targetSdk = 34
         versionCode = flutterVersionCode.toInt()
         versionName = flutterVersionName
@@ -53,6 +53,9 @@ flutter {
 }
 
 dependencies {
-    // Core library desugaring - ✅ Updated to 2.1.4
+    // Core library desugaring
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
+    
+    // WireGuard Android library
+    implementation("com.wireguard.android:tunnel:1.0.20230706")
 }

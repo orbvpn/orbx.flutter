@@ -1,4 +1,4 @@
-package com.orbvpn.orbx\n\nclass VpnService {}\n
+package com.orbvpn.orbx
 
 import android.app.Notification
 import android.app.NotificationChannel
