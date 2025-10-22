@@ -1,278 +1,330 @@
+/// Home Screen
+///
+/// Main dashboard screen showing VPN connection status and controls.
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../providers/connection_provider.dart';
-import '../../../core/constants/mimicry_protocols.dart'; // ADD THIS
-import 'widgets/connection_button.dart';
-import 'widgets/status_indicator.dart';
-import 'widgets/quick_stats.dart';
 
-class HomeScreen extends StatelessWidget {
+import '../../providers/auth_provider.dart';
+import '../../theme/colors.dart';
+import '../../../core/constants/app_constants.dart';
+
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
   @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: SafeArea(
-        child: Consumer<ConnectionProvider>(
-          builder: (context, connection, _) {
-            return Column(
+      appBar: AppBar(
+        title: const Text(AppConstants.appName),
+        actions: [
+          // Profile/Settings button
+          IconButton(
+            icon: const Icon(Icons.settings_outlined),
+            onPressed: () {
+              // TODO: Navigate to settings
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Settings coming soon!')),
+              );
+            },
+          ),
+        ],
+      ),
+      body: Consumer<AuthProvider>(
+        builder: (context, authProvider, child) {
+          final user = authProvider.currentUser;
+
+          return SingleChildScrollView(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // App Bar
-                _buildAppBar(context),
-
-                Expanded(
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.all(24),
+                // Welcome Section
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(20.0),
                     child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Connection Status Indicator
-                        StatusIndicator(
-                          isConnected: connection.isConnected,
-                          isConnecting: connection.isConnecting,
+                        Row(
+                          children: [
+                            CircleAvatar(
+                              backgroundColor: AppColors.primary,
+                              child: Text(
+                                user?.fullName.substring(0, 1).toUpperCase() ??
+                                    'U',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Welcome back,',
+                                    style:
+                                        Theme.of(context).textTheme.bodyMedium,
+                                  ),
+                                  Text(
+                                    user?.fullName ?? 'User',
+                                    style:
+                                        Theme.of(context).textTheme.titleLarge,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
                         ),
+                        if (user?.subscription != null) ...[
+                          const SizedBox(height: 16),
+                          const Divider(),
+                          const SizedBox(height: 16),
 
-                        const SizedBox(height: 40),
-
-                        // Main Connect Button
-                        ConnectionButton(
-                          isConnected: connection.isConnected,
-                          isConnecting: connection.isConnecting,
-                          onPressed: () =>
-                              _handleConnectionToggle(context, connection),
-                        ),
-
-                        const SizedBox(height: 40),
-
-                        // Server Info Card
-                        if (connection.currentServer != null)
-                          _buildServerInfoCard(context, connection),
-
-                        const SizedBox(height: 24),
-
-                        // Quick Stats
-                        if (connection.isConnected)
-                          QuickStats(
-                            bytesSent: connection.bytesSent,
-                            bytesReceived: connection.bytesReceived,
-                            duration: connection.connectionDuration,
+                          // Subscription Info
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Plan',
+                                    style:
+                                        Theme.of(context).textTheme.bodySmall,
+                                  ),
+                                  Text(
+                                    user!.subscription!.planName,
+                                    style:
+                                        Theme.of(context).textTheme.titleMedium,
+                                  ),
+                                ],
+                              ),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  Text(
+                                    'Devices',
+                                    style:
+                                        Theme.of(context).textTheme.bodySmall,
+                                  ),
+                                  Text(
+                                    '${user.subscription!.maxDevices} max',
+                                    style:
+                                        Theme.of(context).textTheme.titleMedium,
+                                  ),
+                                ],
+                              ),
+                            ],
                           ),
-
-                        const SizedBox(height: 24),
-
-                        // Protocol Selector
-                        if (connection.isConnected)
-                          _buildProtocolSelector(context, connection),
+                        ],
                       ],
                     ),
                   ),
                 ),
+
+                const SizedBox(height: 24),
+
+                // Connection Status Card
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24.0),
+                    child: Column(
+                      children: [
+                        // Status Icon
+                        Container(
+                          width: 120,
+                          height: 120,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: AppColors.idle.withOpacity(0.2),
+                            border: Border.all(
+                              color: AppColors.idle,
+                              width: 4,
+                            ),
+                          ),
+                          child: Icon(
+                            Icons.shield_outlined,
+                            size: 60,
+                            color: AppColors.idle,
+                          ),
+                        ),
+
+                        const SizedBox(height: 24),
+
+                        // Status Text
+                        Text(
+                          'Not Connected',
+                          style: Theme.of(context).textTheme.headlineMedium,
+                        ),
+
+                        const SizedBox(height: 8),
+
+                        Text(
+                          'Tap connect to secure your connection',
+                          style:
+                              Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                    color: AppColors.textSecondary,
+                                  ),
+                          textAlign: TextAlign.center,
+                        ),
+
+                        const SizedBox(height: 32),
+
+                        // Connect Button
+                        ElevatedButton(
+                          onPressed: () {
+                            // TODO: Implement connection
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('VPN connection coming soon!'),
+                              ),
+                            );
+                          },
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 48,
+                              vertical: 20,
+                            ),
+                          ),
+                          child: const Text(
+                            'Connect',
+                            style: TextStyle(fontSize: 18),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 24),
+
+                // Quick Actions
+                GridView.count(
+                  crossAxisCount: 2,
+                  crossAxisSpacing: 16,
+                  mainAxisSpacing: 16,
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  children: [
+                    _QuickActionCard(
+                      icon: Icons.dns_outlined,
+                      title: 'Servers',
+                      onTap: () {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                              content: Text('Server list coming soon!')),
+                        );
+                      },
+                    ),
+                    _QuickActionCard(
+                      icon: Icons.bar_chart_outlined,
+                      title: 'Statistics',
+                      onTap: () {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                              content: Text('Statistics coming soon!')),
+                        );
+                      },
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 24),
+
+                // Logout Button
+                OutlinedButton.icon(
+                  onPressed: () async {
+                    // Show confirmation dialog
+                    final shouldLogout = await showDialog<bool>(
+                      context: context,
+                      builder: (context) => AlertDialog(
+                        title: const Text('Logout'),
+                        content: const Text('Are you sure you want to logout?'),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(context, false),
+                            child: const Text('Cancel'),
+                          ),
+                          ElevatedButton(
+                            onPressed: () => Navigator.pop(context, true),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.error,
+                            ),
+                            child: const Text('Logout'),
+                          ),
+                        ],
+                      ),
+                    );
+
+                    if (shouldLogout == true && mounted) {
+                      await authProvider.logout();
+                      if (mounted) {
+                        Navigator.of(context).pushReplacementNamed('/login');
+                      }
+                    }
+                  },
+                  icon: const Icon(Icons.logout_outlined),
+                  label: const Text('Logout'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.error,
+                    side: BorderSide(color: AppColors.error),
+                  ),
+                ),
               ],
-            );
-          },
-        ),
+            ),
+          );
+        },
       ),
     );
   }
+}
 
-  Widget _buildAppBar(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          // Logo
-          Image.asset('assets/images/logo.png', height: 40),
+class _QuickActionCard extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final VoidCallback onTap;
 
-          Row(
+  const _QuickActionCard({
+    required this.icon,
+    required this.title,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // Servers button
-              IconButton(
-                icon: const Icon(Icons.dns_outlined),
-                onPressed: () {
-                  Navigator.pushNamed(context, '/servers');
-                },
+              Icon(
+                icon,
+                size: 48,
+                color: AppColors.primary,
               ),
-
-              // Settings button
-              IconButton(
-                icon: const Icon(Icons.settings_outlined),
-                onPressed: () {
-                  Navigator.pushNamed(context, '/settings');
-                },
+              const SizedBox(height: 12),
+              Text(
+                title,
+                style: Theme.of(context).textTheme.titleMedium,
+                textAlign: TextAlign.center,
               ),
             ],
           ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildServerInfoCard(
-    BuildContext context,
-    ConnectionProvider connection,
-  ) {
-    final server = connection.currentServer!;
-    final protocol = connection.currentProtocol;
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                // Country flag
-                Text(
-                  _getFlagEmoji(server.countryCode),
-                  style: const TextStyle(fontSize: 32),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        server.name,
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                      Text(
-                        server.location,
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                    ],
-                  ),
-                ),
-                // Change server button
-                TextButton(
-                  onPressed: () {
-                    Navigator.pushNamed(context, '/servers');
-                  },
-                  child: const Text('Change'),
-                ),
-              ],
-            ),
-
-            const Divider(height: 24),
-
-            // Protocol info
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Protocol',
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      protocol?.name ?? 'Unknown',
-                      style: Theme.of(context).textTheme.titleSmall,
-                    ),
-                  ],
-                ),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      'Latency',
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '${server.latencyMs ?? 0}ms',
-                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                            color: _getLatencyColor(server.latencyMs),
-                          ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ],
         ),
       ),
     );
-  }
-
-  Widget _buildProtocolSelector(
-    BuildContext context,
-    ConnectionProvider connection,
-  ) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Protocol Disguise',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: MimicryProtocol.values.map((protocol) {
-                final isSelected = protocol == connection.currentProtocol;
-                return ChoiceChip(
-                  label: Text(protocol.name),
-                  selected: isSelected,
-                  onSelected: (_) {
-                    connection.switchProtocol(protocol);
-                  },
-                );
-              }).toList(),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _handleConnectionToggle(
-    BuildContext context,
-    ConnectionProvider connection,
-  ) async {
-    await connection.toggleConnection();
-
-    if (connection.errorMessage != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(connection.errorMessage!),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
-  }
-
-  String _getFlagEmoji(String countryCode) {
-    // Convert country code to flag emoji
-    // This is a simplified version
-    final Map<String, String> flags = {
-      'US': '🇺🇸',
-      'GB': '🇬🇧',
-      'DE': '🇩🇪',
-      'FR': '🇫🇷',
-      'NL': '🇳🇱',
-      'CA': '🇨🇦',
-      'AU': '🇦🇺',
-      'JP': '🇯🇵',
-      'SG': '🇸🇬',
-      'IN': '🇮🇳',
-      'IR': '🇮🇷',
-      'BR': '🇧🇷',
-      // Add more as needed
-    };
-    return flags[countryCode] ?? '🌍';
-  }
-
-  Color _getLatencyColor(int? latency) {
-    if (latency == null) return Colors.grey;
-    if (latency < 100) return Colors.green;
-    if (latency < 300) return Colors.orange;
-    return Colors.red;
   }
 }

@@ -1,6 +1,15 @@
+/// Splash Screen
+///
+/// Initial screen shown while app initializes.
+/// Checks authentication status and navigates accordingly.
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:logger/logger.dart';
+
 import '../../providers/auth_provider.dart';
+import '../../theme/colors.dart';
+import '../../../core/constants/app_constants.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -10,29 +19,53 @@ class SplashScreen extends StatefulWidget {
 }
 
 class _SplashScreenState extends State<SplashScreen> {
+  final Logger _logger = Logger();
+
   @override
   void initState() {
     super.initState();
-    _checkAuth();
+    _initializeApp();
   }
 
-  Future<void> _checkAuth() async {
-    // Wait a bit for splash effect
-    await Future.delayed(const Duration(seconds: 2));
+  Future<void> _initializeApp() async {
+    try {
+      _logger.i('Initializing app...');
 
-    if (!mounted) return;
+      // Initialize authentication
+      final authProvider = context.read<AuthProvider>();
+      await authProvider.initialize();
 
-    // Check if user is authenticated
-    final authProvider = context.read<AuthProvider>();
-    final isAuthenticated = await authProvider.checkAuth();
+      // Wait minimum splash duration for branding
+      await Future.delayed(AppConstants.splashScreenDuration);
 
-    if (!mounted) return;
+      if (!mounted) return;
 
-    // Navigate to appropriate screen
-    if (isAuthenticated) {
-      Navigator.pushReplacementNamed(context, '/home');
-    } else {
-      Navigator.pushReplacementNamed(context, '/login');
+      // Navigate based on authentication status
+      if (authProvider.isAuthenticated) {
+        _logger.i('User authenticated, navigating to home');
+        Navigator.of(context).pushReplacementNamed('/home');
+      } else {
+        _logger.i('User not authenticated, navigating to login');
+        Navigator.of(context).pushReplacementNamed('/login');
+      }
+    } catch (e) {
+      _logger.e('Error during initialization: $e');
+
+      // On error, show error and navigate to login
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Initialization error: $e'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+
+        await Future.delayed(const Duration(seconds: 2));
+
+        if (mounted) {
+          Navigator.of(context).pushReplacementNamed('/login');
+        }
+      }
     }
   }
 
@@ -40,48 +73,50 @@ class _SplashScreenState extends State<SplashScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [
-              Theme.of(context).colorScheme.primary,
-              Theme.of(context).colorScheme.primary.withOpacity(0.7),
-            ],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
+        decoration: const BoxDecoration(
+          gradient: AppColors.backgroundGradient,
         ),
         child: Center(
-            child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            // Logo
-            Image.asset('assets/images/logo.png', width: 150, height: 150),
-
-            const SizedBox(height: 24),
-
-            // App name
-            const Text(
-              'OrbVPN',
-              style: TextStyle(
-                fontSize: 32,
-                fontWeight: FontWeight.bold,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              // App Logo/Icon
+              Icon(
+                Icons.vpn_lock,
+                size: 120,
                 color: Colors.white,
               ),
-            ),
 
-            const SizedBox(height: 8),
+              const SizedBox(height: 24),
 
-            const Text(
-              'Secure. Private. Undetectable.',
-              style: TextStyle(fontSize: 16, color: Colors.white70),
-            ),
+              // App Name
+              Text(
+                AppConstants.appName,
+                style: Theme.of(context).textTheme.displayLarge?.copyWith(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
+              ),
 
-            const SizedBox(height: 48),
+              const SizedBox(height: 8),
 
-            // Loading indicator
-            const CircularProgressIndicator(color: Colors.white),
-          ],
-        )),
+              // Tagline
+              Text(
+                'Secure. Private. Invisible.',
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      color: Colors.white70,
+                    ),
+              ),
+
+              const SizedBox(height: 48),
+
+              // Loading indicator
+              const CircularProgressIndicator(
+                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

@@ -1,18 +1,45 @@
-class User {
+import 'package:equatable/equatable.dart';
+
+class User extends Equatable {
   final String id;
   final String email;
   final String? firstName;
   final String? lastName;
-  final Subscription? subscription;
+  final UserSubscription? subscription;
+  final DateTime? createdAt;
+  final DateTime? updatedAt;
 
-  User({
+  const User({
     required this.id,
     required this.email,
     this.firstName,
     this.lastName,
     this.subscription,
+    this.createdAt,
+    this.updatedAt,
   });
 
+  /// Full name getter
+  String get fullName {
+    if (firstName != null && lastName != null) {
+      return '$firstName $lastName';
+    }
+    return firstName ?? lastName ?? email;
+  }
+
+  /// Display name (for UI)
+  String get displayName {
+    return fullName;
+  }
+
+  /// Check if subscription is active
+  bool get hasActiveSubscription {
+    if (subscription == null) return false;
+    if (subscription!.expiryDate == null) return true; // lifetime subscription
+    return subscription!.expiryDate!.isAfter(DateTime.now());
+  }
+
+  /// Factory constructor from JSON
   factory User.fromJson(Map<String, dynamic> json) {
     return User(
       id: json['id'] as String,
@@ -20,11 +47,19 @@ class User {
       firstName: json['firstName'] as String?,
       lastName: json['lastName'] as String?,
       subscription: json['subscription'] != null
-          ? Subscription.fromJson(json['subscription'] as Map<String, dynamic>)
+          ? UserSubscription.fromJson(
+              json['subscription'] as Map<String, dynamic>)
+          : null,
+      createdAt: json['createdAt'] != null
+          ? DateTime.parse(json['createdAt'] as String)
+          : null,
+      updatedAt: json['updatedAt'] != null
+          ? DateTime.parse(json['updatedAt'] as String)
           : null,
     );
   }
 
+  /// Convert to JSON
   Map<String, dynamic> toJson() {
     return {
       'id': id,
@@ -32,67 +67,120 @@ class User {
       'firstName': firstName,
       'lastName': lastName,
       'subscription': subscription?.toJson(),
+      'createdAt': createdAt?.toIso8601String(),
+      'updatedAt': updatedAt?.toIso8601String(),
     };
   }
+
+  /// Create a copy with updated fields
+  User copyWith({
+    String? id,
+    String? email,
+    String? firstName,
+    String? lastName,
+    UserSubscription? subscription,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+  }) {
+    return User(
+      id: id ?? this.id,
+      email: email ?? this.email,
+      firstName: firstName ?? this.firstName,
+      lastName: lastName ?? this.lastName,
+      subscription: subscription ?? this.subscription,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+    );
+  }
+
+  @override
+  List<Object?> get props => [
+        id,
+        email,
+        firstName,
+        lastName,
+        subscription,
+        createdAt,
+        updatedAt,
+      ];
+
+  @override
+  bool get stringify => true;
 }
 
-class Subscription {
+/// User Subscription Model
+class UserSubscription extends Equatable {
   final String id;
   final String planName;
   final int maxDevices;
-  final String? expiryDate;
+  final DateTime? expiryDate;
+  final bool isActive;
 
-  Subscription({
+  const UserSubscription({
     required this.id,
     required this.planName,
     required this.maxDevices,
     this.expiryDate,
+    this.isActive = true,
   });
 
-  factory Subscription.fromJson(Map<String, dynamic> json) {
-    return Subscription(
+  /// Check if subscription is expired
+  bool get isExpired {
+    if (expiryDate == null) return false; // lifetime
+    return expiryDate!.isBefore(DateTime.now());
+  }
+
+  /// Days remaining until expiry
+  int? get daysRemaining {
+    if (expiryDate == null) return null; // lifetime
+    final difference = expiryDate!.difference(DateTime.now());
+    return difference.inDays;
+  }
+
+  /// Factory constructor from JSON
+  factory UserSubscription.fromJson(Map<String, dynamic> json) {
+    return UserSubscription(
       id: json['id'] as String,
       planName: json['planName'] as String,
       maxDevices: json['maxDevices'] as int,
-      expiryDate: json['expiryDate'] as String?,
+      expiryDate: json['expiryDate'] != null
+          ? DateTime.parse(json['expiryDate'] as String)
+          : null,
+      isActive: json['isActive'] as bool? ?? true,
     );
   }
 
+  /// Convert to JSON
   Map<String, dynamic> toJson() {
     return {
       'id': id,
       'planName': planName,
       'maxDevices': maxDevices,
-      'expiryDate': expiryDate,
+      'expiryDate': expiryDate?.toIso8601String(),
+      'isActive': isActive,
     };
   }
-}
 
-// AuthResponse class for login/register responses
-class AuthResponse {
-  final String accessToken;
-  final String refreshToken;
-  final User user;
-
-  AuthResponse({
-    required this.accessToken,
-    required this.refreshToken,
-    required this.user,
-  });
-
-  factory AuthResponse.fromJson(Map<String, dynamic> json) {
-    return AuthResponse(
-      accessToken: json['accessToken'] as String,
-      refreshToken: json['refreshToken'] as String,
-      user: User.fromJson(json['user'] as Map<String, dynamic>),
+  /// Create a copy with updated fields
+  UserSubscription copyWith({
+    String? id,
+    String? planName,
+    int? maxDevices,
+    DateTime? expiryDate,
+    bool? isActive,
+  }) {
+    return UserSubscription(
+      id: id ?? this.id,
+      planName: planName ?? this.planName,
+      maxDevices: maxDevices ?? this.maxDevices,
+      expiryDate: expiryDate ?? this.expiryDate,
+      isActive: isActive ?? this.isActive,
     );
   }
 
-  Map<String, dynamic> toJson() {
-    return {
-      'accessToken': accessToken,
-      'refreshToken': refreshToken,
-      'user': user.toJson(),
-    };
-  }
+  @override
+  List<Object?> get props => [id, planName, maxDevices, expiryDate, isActive];
+
+  @override
+  bool get stringify => true;
 }
