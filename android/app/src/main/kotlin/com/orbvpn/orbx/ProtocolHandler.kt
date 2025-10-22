@@ -225,4 +225,14 @@ class ProtocolHandler(private val context: Context) {
             null
         }
     }
+
+    fun getAllProtocols(): List<Map<String, String>> {
+    return MimicryProtocol.values().map { protocol ->
+        mapOf(
+            "name" to protocol.name,
+            "displayName" to protocol.protocolName,
+            "endpoint" to protocol.endpoint
+        )
+    }
+}
 }
