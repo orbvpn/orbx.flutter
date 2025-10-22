@@ -1,30 +1,44 @@
+import java.util.Properties
+import java.io.FileInputStream
+
 plugins {
     id("com.android.application")
-    id("com.google.gms.google-services")
     id("kotlin-android")
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+val localProperties = Properties()
+val localPropertiesFile = rootProject.file("local.properties")
+if (localPropertiesFile.exists()) {
+    localProperties.load(FileInputStream(localPropertiesFile))
+}
+
+val flutterVersionCode = localProperties.getProperty("flutter.versionCode") ?: "1"
+val flutterVersionName = localProperties.getProperty("flutter.versionName") ?: "1.0"
+
 android {
     namespace = "com.orbvpn.orbx"
-    compileSdk = 36
-    ndkVersion = "27.0.12077973"
+    compileSdk = 36  // ✅ Updated to 36
 
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17  // Changed from 1.8
-        targetCompatibility = JavaVersion.VERSION_17  // Changed from 1.8
+        // Enable core library desugaring
+        isCoreLibraryDesugaringEnabled = true
+        
+        sourceCompatibility = JavaVersion.VERSION_1_8
+        targetCompatibility = JavaVersion.VERSION_1_8
     }
 
     kotlinOptions {
-        jvmTarget = "17"  // Changed from 1.8
+        jvmTarget = "1.8"
     }
 
     defaultConfig {
         applicationId = "com.orbvpn.orbx"
-        minSdk = 24  // Set explicit minimum
-        targetSdk = 36
-        versionCode = 1
-        versionName = "1.0.0"
+        minSdk = flutter.minSdkVersion
+        targetSdk = 34
+        versionCode = flutterVersionCode.toInt()
+        versionName = flutterVersionName
+        multiDexEnabled = true
     }
 
     buildTypes {
@@ -39,5 +53,6 @@ flutter {
 }
 
 dependencies {
-    implementation("com.wireguard.android:tunnel:1.0.20230427")
+    // Core library desugaring - ✅ Updated to 2.1.4
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 }
