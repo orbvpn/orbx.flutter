@@ -2,6 +2,7 @@
 ///
 /// Contains app metadata, feature flags, and general configuration
 /// that doesn't fit into specific categories.
+library;
 
 class AppConstants {
   AppConstants._(); // Private constructor

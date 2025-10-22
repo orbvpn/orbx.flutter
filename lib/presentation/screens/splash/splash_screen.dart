@@ -2,6 +2,7 @@
 ///
 /// Initial screen shown while app initializes.
 /// Checks authentication status and navigates accordingly.
+library;
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';

@@ -1,6 +1,7 @@
 /// Theme Provider
 ///
 /// Manages theme state (light/dark mode) with persistence.
+library;
 
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';

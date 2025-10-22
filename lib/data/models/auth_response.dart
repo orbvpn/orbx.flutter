@@ -2,6 +2,7 @@
 ///
 /// Represents the response from login/register operations containing
 /// access tokens and user information.
+library;
 
 import 'package:equatable/equatable.dart';
 import 'user.dart';

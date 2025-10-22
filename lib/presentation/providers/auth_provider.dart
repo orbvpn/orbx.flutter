@@ -2,6 +2,7 @@
 ///
 /// Manages authentication state and provides authentication methods to the UI.
 /// Uses Provider pattern for state management.
+library;
 
 import 'package:flutter/foundation.dart';
 import 'package:logger/logger.dart';

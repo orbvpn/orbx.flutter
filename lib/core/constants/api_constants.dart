@@ -2,6 +2,7 @@
 ///
 /// This file contains all API endpoints, configurations, and network settings
 /// used throughout the application.
+library;
 
 class ApiConstants {
   ApiConstants._(); // Private constructor to prevent instantiation

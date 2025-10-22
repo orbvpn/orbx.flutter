@@ -1,6 +1,7 @@
 /// App Color Palette
 ///
 /// Defines all colors used throughout the application for consistency.
+library;
 
 import 'package:flutter/material.dart';
 

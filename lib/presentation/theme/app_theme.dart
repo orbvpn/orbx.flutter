@@ -2,6 +2,7 @@
 ///
 /// Defines the visual appearance of the app including colors, typography,
 /// and component styling for both light and dark modes.
+library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';

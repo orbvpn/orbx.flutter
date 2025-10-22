@@ -1,6 +1,7 @@
 /// Home Screen
 ///
 /// Main dashboard screen showing VPN connection status and controls.
+library;
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';

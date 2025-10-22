@@ -2,6 +2,7 @@
 ///
 /// Handles all GraphQL communication with the OrbNet API.
 /// Singleton pattern for consistent client instance.
+library;
 
 import 'package:graphql_flutter/graphql_flutter.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';

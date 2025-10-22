@@ -6,6 +6,7 @@
 /// - Logout
 /// - Token management
 /// - User session management
+library;
 
 import 'package:logger/logger.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';

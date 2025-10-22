@@ -2,6 +2,7 @@
 ///
 /// Allows users to log in with email and password.
 /// Includes validation and error handling.
+library;
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';

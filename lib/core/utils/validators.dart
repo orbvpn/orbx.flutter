@@ -1,6 +1,7 @@
 /// Input Validators
 ///
 /// Provides validation functions for form inputs throughout the app.
+library;
 
 import '../../core/constants/api_constants.dart';
 
