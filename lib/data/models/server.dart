@@ -9,6 +9,8 @@ class OrbXServer extends Equatable {
   final String location;
   final String country;
   final String countryCode;
+  final String? hostname; // ✅ ADD THIS FIELD
+  final String? region; // ✅ ADD THIS FIELD (from getBestServer query)
   final List<MimicryProtocol> protocols;
   final bool quantumSafe;
   final int currentConnections;
@@ -25,6 +27,8 @@ class OrbXServer extends Equatable {
     required this.location,
     required this.country,
     required this.countryCode,
+    this.hostname, // ✅ ADD THIS
+    this.region, // ✅ ADD THIS
     required this.protocols,
     required this.quantumSafe,
     required this.currentConnections,
@@ -43,8 +47,11 @@ class OrbXServer extends Equatable {
       port: json['port'] as int,
       location: json['location'] as String,
       country: json['country'] as String,
-      countryCode:
-          json['country'] as String? ?? '', // ✅ Map 'country' to 'countryCode'
+      countryCode: json['countryCode'] as String? ??
+          json['country'] as String? ??
+          '', // ✅ Try countryCode first, fallback to country
+      hostname: json['hostname'] as String?, // ✅ ADD THIS
+      region: json['region'] as String?, // ✅ ADD THIS
       protocols: (json['protocols'] as List<dynamic>)
           .map((p) => _parseProtocol(p as String))
           .toList(),
@@ -79,6 +86,8 @@ class OrbXServer extends Equatable {
         return MimicryProtocol.yandex;
       case 'wechat':
         return MimicryProtocol.wechat;
+      case 'wireguard': // ✅ ADD THIS
+        return MimicryProtocol.https; // Map to https as fallback
       default:
         return MimicryProtocol.https;
     }
@@ -91,6 +100,10 @@ class OrbXServer extends Equatable {
   double get loadPercentage =>
       (currentConnections / maxConnections * 100).clamp(0, 100);
 
+  /// Get the best endpoint to use for connection
+  /// Prefers hostname over IP address
+  String get endpoint => hostname ?? ipAddress; // ✅ ADD THIS HELPER
+
   @override
   List<Object?> get props => [
         id,
@@ -99,6 +112,8 @@ class OrbXServer extends Equatable {
         port,
         location,
         country,
+        hostname, // ✅ ADD THIS
+        region, // ✅ ADD THIS
         protocols,
         latencyMs,
       ];
@@ -111,6 +126,8 @@ class OrbXServer extends Equatable {
     String? location,
     String? country,
     String? countryCode,
+    String? hostname, // ✅ ADD THIS
+    String? region, // ✅ ADD THIS
     List<MimicryProtocol>? protocols,
     bool? quantumSafe,
     int? currentConnections,
@@ -127,6 +144,8 @@ class OrbXServer extends Equatable {
       location: location ?? this.location,
       country: country ?? this.country,
       countryCode: countryCode ?? this.countryCode,
+      hostname: hostname ?? this.hostname, // ✅ ADD THIS
+      region: region ?? this.region, // ✅ ADD THIS
       protocols: protocols ?? this.protocols,
       quantumSafe: quantumSafe ?? this.quantumSafe,
       currentConnections: currentConnections ?? this.currentConnections,

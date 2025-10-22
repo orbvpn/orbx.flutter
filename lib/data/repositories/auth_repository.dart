@@ -259,6 +259,44 @@ class AuthRepository {
     }
   }
 
+  /// Refresh access token using refresh token
+  ///
+  /// Returns true if refresh was successful, false otherwise
+  Future<bool> refreshToken() async {
+    try {
+      _logger.i('Attempting to refresh access token');
+
+      // Get stored refresh token
+      final refreshToken = await _secureStorage.read(key: 'refresh_token');
+
+      if (refreshToken == null || refreshToken.isEmpty) {
+        _logger.w('No refresh token available');
+        return false;
+      }
+
+      // Call refresh token mutation
+      final result = await _graphQLService.mutate(
+        GraphQLQueries.refreshToken,
+        variables: {'refreshToken': refreshToken},
+        operationName: 'RefreshToken',
+      );
+
+      // Parse response
+      final refreshData = result['refreshToken'] as Map<String, dynamic>;
+      final newAccessToken = refreshData['accessToken'] as String;
+      final newRefreshToken = refreshData['refreshToken'] as String?;
+
+      // Save new tokens
+      await _graphQLService.saveToken(newAccessToken, newRefreshToken);
+
+      _logger.i('Token refreshed successfully');
+      return true;
+    } catch (e) {
+      _logger.e('Token refresh failed: $e');
+      return false;
+    }
+  }
+
   /// Change user password
   Future<bool> changePassword({
     required String oldPassword,

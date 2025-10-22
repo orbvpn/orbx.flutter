@@ -99,4 +99,14 @@ class ApiConstants {
 
   /// Maximum password length
   static const int maxPasswordLength = 128;
+
+  // ==========================================
+  // Environment Configuration
+  // ==========================================
+
+  /// Set to false in production!
+  static const bool isDevelopment = true; // TODO: Use build flavors
+
+  /// Accept self-signed certificates (DEVELOPMENT ONLY)
+  static const bool acceptSelfSignedCertificates = isDevelopment;
 }

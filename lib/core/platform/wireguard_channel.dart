@@ -3,7 +3,7 @@ import '../../data/models/wireguard_config.dart';
 
 class WireGuardChannel {
   static const MethodChannel _channel = MethodChannel(
-    'com.orbvpn.orbx/wireguard',
+    'com.orbvpn.orbx/vpn',
   );
 
   // Generate WireGuard keypair (uses native crypto)
@@ -70,10 +70,10 @@ class WireGuardChannel {
     }
   }
 
-  // Listen to connection state changes
+// Listen to connection state changes
   static Stream<String> get connectionStateStream {
     return const EventChannel(
-      'com.orbvpn.orbx/wireguard_state',
+      'com.orbvpn.orbx/vpn_state',
     ).receiveBroadcastStream().map((event) => event as String);
   }
 }

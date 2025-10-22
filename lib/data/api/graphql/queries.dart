@@ -152,4 +152,29 @@ class GraphQLQueries {
       }
     }
   ''';
+
+  static const String refreshToken = r'''
+    mutation RefreshToken($refreshToken: String!) {
+      refreshToken(refreshToken: $refreshToken) {
+        accessToken
+        refreshToken
+        user {
+          id
+          email
+          profile {
+            firstName
+            lastName
+          }
+          subscription {
+            group {
+              id
+              name
+            }
+            multiLoginCount
+            expiresAt
+          }
+        }
+      }
+    }
+  ''';
 }

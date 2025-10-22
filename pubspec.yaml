@@ -19,6 +19,7 @@ dependencies:
   # HTTP Client (for OrbX servers)
   dio: ^5.4.0
   http: ^1.1.0
+  crypto: ^3.0.3
 
   # Network
   connectivity_plus: ^6.1.5
