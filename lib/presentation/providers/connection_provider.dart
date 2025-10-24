@@ -108,15 +108,13 @@ class ConnectionProvider extends ChangeNotifier {
     }
   }
 
-  // Disconnect from VPN
+// Disconnect from VPN
   Future<void> disconnect() async {
     try {
       _state = ConnectionState.disconnecting;
       notifyListeners();
 
-      if (_currentServer != null) {
-        await _wireguardService.disconnect(_currentServer!);
-      }
+      await _wireguardService.disconnect();
 
       _state = ConnectionState.disconnected;
       _currentServer = null;

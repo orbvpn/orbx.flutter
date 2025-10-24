@@ -13,6 +13,7 @@ class WireGuardService {
 
   WireGuardConfig? _currentConfig;
   bool _isConnected = false;
+  OrbXServer? _connectedServer; // ✅ ADD THIS LINE
 
   bool get isConnected => _isConnected;
   WireGuardConfig? get currentConfig => _currentConfig;
@@ -35,12 +36,12 @@ class WireGuardService {
         print('╚════════════════════════════════════════╝');
       }
 
-      // 1. Generate WireGuard keypair
-      print('🔑 Generating WireGuard keypair...');
+      // 1. ALWAYS Generate NEW WireGuard keypair for each connection
+      print('🔑 Generating NEW WireGuard keypair...');
       final keypair = await WireGuardChannel.generateKeypair();
       final privateKey = keypair['privateKey']!;
       final publicKey = keypair['publicKey']!;
-      print('✅ Keypair generated');
+      print('✅ New keypair generated');
 
       // 2. Get authentication token
       print('🎫 Retrieving authentication token...');
@@ -51,8 +52,7 @@ class WireGuardService {
       print('✅ Token retrieved');
 
       // 3. Register peer with server
-      // Use hostname if available, otherwise use IP address
-      final endpoint = server.endpoint; // ✅ FIXED: Use the helper getter
+      final endpoint = server.endpoint;
       final url = 'https://$endpoint:${server.port}/wireguard/connect';
 
       print('📞 Registering peer with server...');
@@ -93,7 +93,7 @@ class WireGuardService {
         gateway: data['gateway'] as String,
         dns: List<String>.from(data['dns'] as List),
         mtu: data['mtu'] as int,
-        serverEndpoint: '$endpoint:51820', // Use same endpoint for WireGuard
+        serverEndpoint: '$endpoint:51820',
       );
 
       if (EnvironmentConfig.enableDebugLogging) {
@@ -114,6 +114,7 @@ class WireGuardService {
 
       _currentConfig = config;
       _isConnected = true;
+      _connectedServer = server; // ✅ ADD THIS LINE
 
       print('╔════════════════════════════════════════╗');
       print('║   ✅ Connection Established!           ║');
@@ -136,38 +137,53 @@ class WireGuardService {
     }
   }
 
-  /// Disconnect from VPN
-  Future<void> disconnect(OrbXServer server) async {
+  /// Disconnect from VPN and cleanup server-side peer
+  Future<void> disconnect() async {
     try {
+      if (!_isConnected || _currentConfig == null || _connectedServer == null) {
+        print('⚠️  Not connected');
+        return;
+      }
+
       print('🔌 Disconnecting from VPN...');
 
-      await WireGuardChannel.disconnect();
+      // 1. Stop WireGuard tunnel on phone
+      final success = await WireGuardChannel.disconnect();
 
+      if (!success) {
+        print('⚠️  Failed to stop VPN tunnel');
+      }
+
+      // 2. Notify server to remove peer
       try {
         final token = await _authRepo.getAccessToken();
         if (token != null) {
-          final endpoint = server.endpoint; // ✅ FIXED: Use the helper getter
+          final endpoint = _connectedServer!.endpoint;
           await _dio.post(
-            'https://$endpoint:${server.port}/wireguard/disconnect',
+            'https://$endpoint:${_connectedServer!.port}/wireguard/disconnect',
             options: Options(
               headers: {
                 'Authorization': 'Bearer $token',
               },
+              sendTimeout: Duration(seconds: 5),
+              receiveTimeout: Duration(seconds: 5),
             ),
           );
-          print('✅ Server notified of disconnect');
+          print('✅ Peer removed from server');
         }
       } catch (e) {
         print('⚠️  Failed to notify server: $e');
+        // Don't throw - local disconnect already succeeded
       }
 
-      _currentConfig = null;
       _isConnected = false;
+      _currentConfig = null;
+      _connectedServer = null;
 
       print('✅ Disconnected successfully');
     } catch (e) {
-      print('❌ Disconnect failed: $e');
-      throw Exception('Disconnect failed: $e');
+      print('❌ Disconnect error: $e');
+      rethrow;
     }
   }
 

@@ -198,29 +198,28 @@ class MainActivity : FlutterActivity() {
                 }
                 
                 // Disconnect VPN
-                "disconnect" -> {
-                    try {
-                        Log.d(TAG, "Disconnecting VPN")
-                        
-                        // Stop connection monitoring
-                        connectionManager.stopMonitoring()
-                        
-                        // Disconnect WireGuard
-                        val success = wireguardManager.disconnect()
-                        
-                        // Stop VPN service
-                        stopVpnService()
-                        
-                        result.success(success)
-                        sendStateUpdate(mapOf("state" to "disconnected"))
-                        
-                        Log.d(TAG, "VPN disconnected successfully")
-                        
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Failed to disconnect", e)
-                        result.error("DISCONNECT_ERROR", e.message, null)
-                    }
-                }
+"disconnect" -> {
+    try {
+        Log.d(TAG, "Disconnect requested")
+        
+        // Stop foreground service
+        val serviceIntent = Intent(applicationContext, OrbVpnService::class.java)
+        stopService(serviceIntent)
+        
+        // Disconnect WireGuard
+        val success = wireguardManager.disconnect()
+        result.success(success)
+        
+        // Send state update
+        sendStateUpdate(mapOf("state" to "disconnected"))
+        
+        Log.d(TAG, "Disconnect completed")
+        
+    } catch (e: Exception) {
+        Log.e(TAG, "Failed to disconnect", e)
+        result.error("DISCONNECT_ERROR", e.message, null)
+    }
+}
                 
                 // Get connection status
                 "getStatus" -> {

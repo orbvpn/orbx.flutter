@@ -31,59 +31,58 @@ class WireGuardManager(private val context: Context) {
         }
     }
     
-    // Connect to WireGuard server
-    fun connect(configData: Map<String, Any>): Boolean {
-        return try {
-            Log.d(TAG, "Connecting to WireGuard...")
-            
-            // Check VPN permission
-            val intent = VpnService.prepare(context)
-            if (intent != null) {
-                Log.w(TAG, "VPN permission not granted")
-                return false
-            }
-            
-            // Start VPN service
-            val serviceIntent = Intent(context, OrbVpnService::class.java).apply {
-                action = OrbVpnService.ACTION_CONNECT
-                putExtra(OrbVpnService.EXTRA_CONFIG, HashMap(configData))
-            }
-            
-            context.startForegroundService(serviceIntent)
-            
-            isConnected = true
-            Log.d(TAG, "VPN service started")
-            true
-            
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to connect", e)
-            false
+// Connect to WireGuard server
+fun connect(configData: Map<String, Any>): Boolean {
+    return try {
+        Log.d(TAG, "Connecting to WireGuard...")
+        
+        // Start VPN service
+        val serviceIntent = Intent(context, OrbVpnService::class.java).apply {
+            action = OrbVpnService.ACTION_CONNECT
+            putExtra(OrbVpnService.EXTRA_CONFIG, HashMap(configData))
         }
+        
+        context.startForegroundService(serviceIntent)
+        
+        isConnected = true
+        Log.d(TAG, "VPN service started successfully")
+        true
+        
+    } catch (e: Exception) {
+        Log.e(TAG, "Failed to connect", e)
+        false
     }
+}
     
-    // Disconnect from WireGuard
-    fun disconnect(): Boolean {
-        return try {
-            Log.d(TAG, "Disconnecting from WireGuard...")
-            
-            val serviceIntent = Intent(context, OrbVpnService::class.java).apply {
-                action = OrbVpnService.ACTION_DISCONNECT
-            }
-            
-            context.startService(serviceIntent)
-            
-            isConnected = false
-            bytesSent = 0
-            bytesReceived = 0
-            
-            Log.d(TAG, "VPN service stopped")
-            true
-            
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to disconnect", e)
-            false
+// Disconnect from WireGuard
+fun disconnect(): Boolean {
+    return try {
+        Log.d(TAG, "Disconnecting from WireGuard...")
+        
+        val serviceIntent = Intent(context, OrbVpnService::class.java).apply {
+            action = OrbVpnService.ACTION_DISCONNECT
         }
+        
+        context.startService(serviceIntent)
+        
+        isConnected = false
+        Log.d(TAG, "VPN service stop requested")
+        true
+        
+    } catch (e: Exception) {
+        Log.e(TAG, "Failed to disconnect", e)
+        false
     }
+}
+
+// Add this method to check actual connection status
+fun getConnectionStatus(): Map<String, Any> {
+    return mapOf(
+        "isConnected" to isConnected,
+        "bytesSent" to bytesSent,
+        "bytesReceived" to bytesReceived
+    )
+}
     
     // Get connection status
     fun getStatus(): Map<String, Any> {
