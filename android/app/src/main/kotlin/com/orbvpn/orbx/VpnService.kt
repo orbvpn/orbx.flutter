@@ -14,12 +14,8 @@ import androidx.core.app.NotificationCompat
 import com.wireguard.android.backend.GoBackend
 import com.wireguard.android.backend.Tunnel
 import com.wireguard.config.Config
-import com.wireguard.config.InetNetwork
-import com.wireguard.config.Interface
-import com.wireguard.config.Peer
-import com.wireguard.crypto.Key
-import com.wireguard.crypto.KeyPair
-import java.net.InetAddress
+import java.io.BufferedReader
+import java.io.StringReader
 
 class OrbVpnService : VpnService() {
     private val TAG = "OrbVpnService"
@@ -28,20 +24,34 @@ class OrbVpnService : VpnService() {
     
     // WireGuard backend
     private var backend: GoBackend? = null
-    private var tunnel: Tunnel? = null
+    private var tunnel: OrbTunnel? = null
     
     // Notification
     private val CHANNEL_ID = "OrbVPN_Channel"
     private val NOTIFICATION_ID = 1
     
-    // Statistics
-    private var bytesSent: Long = 0
-    private var bytesReceived: Long = 0
-    
-    companion object {
-        const val ACTION_CONNECT = "com.orbvpn.orbx.CONNECT"
-        const val ACTION_DISCONNECT = "com.orbvpn.orbx.DISCONNECT"
-        const val EXTRA_CONFIG = "config"
+    // Inner class implementing Tunnel interface
+    inner class OrbTunnel(private val name: String) : Tunnel {
+        override fun getName(): String = name
+        
+        override fun onStateChange(newState: Tunnel.State) {
+            Log.d(TAG, "🔄 Tunnel state changed: $newState")
+            when (newState) {
+                Tunnel.State.UP -> {
+                    isRunning = true
+                    updateNotification("Connected")
+                    Log.d(TAG, "✅ VPN tunnel is UP")
+                }
+                Tunnel.State.DOWN -> {
+                    isRunning = false
+                    updateNotification("Disconnected")
+                    Log.d(TAG, "⛔ VPN tunnel is DOWN")
+                }
+                else -> {
+                    Log.d(TAG, "🔄 Tunnel state: $newState")
+                }
+            }
+        }
     }
     
     override fun onCreate() {
@@ -49,9 +59,13 @@ class OrbVpnService : VpnService() {
         Log.d(TAG, "VPN Service created")
         createNotificationChannel()
         
-        // Initialize WireGuard backend
-        backend = GoBackend(applicationContext)
-        Log.d(TAG, "✅ WireGuard backend initialized")
+        // Initialize WireGuard backend - CRITICAL: pass VpnService context
+        try {
+            backend = GoBackend(this)
+            Log.d(TAG, "✅ WireGuard backend initialized")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to initialize WireGuard backend", e)
+        }
     }
     
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -87,73 +101,29 @@ class OrbVpnService : VpnService() {
             // Start foreground service with notification
             startForeground(NOTIFICATION_ID, createNotification("Connecting..."))
             
-            // Extract WireGuard configuration from configData
-            val privateKeyStr = configData["privateKey"] as? String 
-                ?: throw Exception("Missing privateKey in config")
-            val serverPublicKeyStr = configData["serverPublicKey"] as? String 
-                ?: throw Exception("Missing serverPublicKey in config")
-            val allocatedIp = configData["allocatedIp"] as? String 
-                ?: throw Exception("Missing allocatedIp in config")
-            val serverEndpoint = configData["serverEndpoint"] as? String 
-                ?: throw Exception("Missing serverEndpoint in config")
-            val mtu = (configData["mtu"] as? Number)?.toInt() ?: 1420
+            // Get the WireGuard config file
+            val configFile = configData["configFile"] as? String 
+                ?: throw Exception("Missing configFile in config")
             
-            @Suppress("UNCHECKED_CAST")
-            val dnsList = configData["dns"] as? List<String> ?: listOf("1.1.1.1", "1.0.0.1")
+            Log.d(TAG, "📝 Parsing WireGuard config...")
             
-            Log.d(TAG, "📝 Building WireGuard config:")
-            Log.d(TAG, "   - Allocated IP: $allocatedIp")
-            Log.d(TAG, "   - Server Endpoint: $serverEndpoint")
-            Log.d(TAG, "   - MTU: $mtu")
-            Log.d(TAG, "   - DNS: ${dnsList.joinToString(", ")}")
+            // Parse WireGuard configuration
+            val bufferedReader = BufferedReader(StringReader(configFile))
+            val config = Config.parse(bufferedReader)
             
-            // Build WireGuard Configuration
-            val interfaceBuilder = Interface.Builder()
-                .parsePrivateKey(privateKeyStr)
-                .parseAddresses(allocatedIp)
-                .parseDnsServers(dnsList.joinToString(","))
-                .setMtu(mtu)
-            
-            val peerBuilder = Peer.Builder()
-                .parsePublicKey(serverPublicKeyStr)
-                .parseEndpoint(serverEndpoint)
-                .parseAllowedIPs("0.0.0.0/0, ::/0")
-                .setPersistentKeepalive(25)
-            
-            val config = Config.Builder()
-                .setInterface(interfaceBuilder.build())
-                .addPeer(peerBuilder.build())
-                .build()
-            
-            Log.d(TAG, "✅ WireGuard config built successfully")
+            Log.d(TAG, "✅ WireGuard config parsed successfully")
+            Log.d(TAG, "   Interface: ${config.`interface`.addresses}")
+            Log.d(TAG, "   DNS: ${config.`interface`.dnsServers}")
+            Log.d(TAG, "   Peers: ${config.peers.size}")
             
             // Create tunnel
-            tunnel = object : Tunnel {
-                override fun getName(): String = "OrbVPN"
-                override fun onStateChange(newState: Tunnel.State) {
-                    Log.d(TAG, "🔄 Tunnel state changed: $newState")
-                    when (newState) {
-                        Tunnel.State.UP -> {
-                            isRunning = true
-                            updateNotification("Connected")
-                            Log.d(TAG, "✅ VPN tunnel is UP")
-                        }
-                        Tunnel.State.DOWN -> {
-                            isRunning = false
-                            updateNotification("Disconnected")
-                            Log.d(TAG, "⛔ VPN tunnel is DOWN")
-                        }
-                        Tunnel.State.TOGGLE -> {
-                            // Toggle state - do nothing, backend will handle
-                            Log.d(TAG, "🔄 Tunnel toggling...")
-                        }
-                    }
-                }
-            }
+            tunnel = OrbTunnel("OrbVPN")
             
-            // Establish VPN tunnel using WireGuard backend
-            Log.d(TAG, "🔌 Establishing VPN tunnel...")
+            // Use GoBackend to establish tunnel - this will internally call builder.establish()
+            Log.d(TAG, "🔌 Establishing VPN tunnel via GoBackend...")
             backend?.setState(tunnel, Tunnel.State.UP, config)
+            
+            isRunning = true
             
             Log.d(TAG, "╔════════════════════════════════════════╗")
             Log.d(TAG, "║   ✅ VPN Connected Successfully!      ║")
@@ -161,6 +131,9 @@ class OrbVpnService : VpnService() {
             
         } catch (e: Exception) {
             Log.e(TAG, "❌ VPN connection failed", e)
+            Log.e(TAG, "   Exception type: ${e.javaClass.simpleName}")
+            Log.e(TAG, "   Message: ${e.message}")
+            e.printStackTrace()
             updateNotification("Connection failed: ${e.message}")
             stopSelf()
         }
@@ -227,13 +200,6 @@ class OrbVpnService : VpnService() {
         notificationManager.notify(NOTIFICATION_ID, createNotification(status))
     }
     
-    fun getStatistics(): Map<String, Long> {
-        return mapOf(
-            "bytesSent" to bytesSent,
-            "bytesReceived" to bytesReceived
-        )
-    }
-    
     override fun onDestroy() {
         super.onDestroy()
         Log.d(TAG, "Service being destroyed")
@@ -260,5 +226,11 @@ class OrbVpnService : VpnService() {
         super.onRevoke()
         Log.w(TAG, "⚠️  VPN permission revoked by user")
         disconnect()
+    }
+    
+    companion object {
+        const val ACTION_CONNECT = "com.orbvpn.orbx.CONNECT"
+        const val ACTION_DISCONNECT = "com.orbvpn.orbx.DISCONNECT"
+        const val EXTRA_CONFIG = "config"
     }
 }

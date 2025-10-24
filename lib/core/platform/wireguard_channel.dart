@@ -26,7 +26,8 @@ class WireGuardChannel {
         'configFile': config.toConfigFile(),
         'privateKey': config.privateKey,
         'serverPublicKey': config.serverPublicKey,
-        'endpoint': config.serverEndpoint,
+        'serverEndpoint':
+            config.serverEndpoint, // ✅ FIXED: Changed from 'endpoint'
         'allocatedIp': config.allocatedIp,
         'dns': config.dns,
         'mtu': config.mtu,

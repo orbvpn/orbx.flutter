@@ -56,14 +56,15 @@ class MainActivity : FlutterActivity() {
         
         Log.d(TAG, "Configuring Flutter engine")
         
-        // Initialize managers
-        wireguardManager = WireGuardManager(applicationContext)
-        protocolHandler = ProtocolHandler(applicationContext)
-        connectionManager = ConnectionManager(
-            applicationContext,
-            wireguardManager,
-            protocolHandler
-        )
+// Initialize managers
+// IMPORTANT: Use 'this' (Activity context) for VPN permission checks
+wireguardManager = WireGuardManager(this)
+protocolHandler = ProtocolHandler(this)
+connectionManager = ConnectionManager(
+    this,
+    wireguardManager,
+    protocolHandler
+)
         
         // Setup Method Channel (for function calls from Flutter)
         setupMethodChannel(flutterEngine)
