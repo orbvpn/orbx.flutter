@@ -143,6 +143,10 @@ class OrbVpnService : VpnService() {
                             updateNotification("Disconnected")
                             Log.d(TAG, "⛔ VPN tunnel is DOWN")
                         }
+                        Tunnel.State.TOGGLE -> {
+                            // Toggle state - do nothing, backend will handle
+                            Log.d(TAG, "🔄 Tunnel toggling...")
+                        }
                     }
                 }
             }
