@@ -122,6 +122,12 @@
       "languageVersion": "3.8"
     },
     {
+      "name": "cli_util",
+      "rootUri": "file:///Users/nima/.pub-cache/hosted/pub.dev/cli_util-0.4.2",
+      "packageUri": "lib/",
+      "languageVersion": "3.4"
+    },
+    {
       "name": "clock",
       "rootUri": "file:///Users/nima/.pub-cache/hosted/pub.dev/clock-1.1.2",
       "packageUri": "lib/",
@@ -276,6 +282,12 @@
       "rootUri": "file:///Users/nima/.pub-cache/hosted/pub.dev/flutter_hooks-0.21.3+1",
       "packageUri": "lib/",
       "languageVersion": "2.17"
+    },
+    {
+      "name": "flutter_launcher_icons",
+      "rootUri": "file:///Users/nima/.pub-cache/hosted/pub.dev/flutter_launcher_icons-0.13.1",
+      "packageUri": "lib/",
+      "languageVersion": "2.18"
     },
     {
       "name": "flutter_lints",
@@ -534,6 +546,12 @@
       "rootUri": "file:///Users/nima/.pub-cache/hosted/pub.dev/http_parser-4.1.2",
       "packageUri": "lib/",
       "languageVersion": "3.4"
+    },
+    {
+      "name": "image",
+      "rootUri": "file:///Users/nima/.pub-cache/hosted/pub.dev/image-4.5.4",
+      "packageUri": "lib/",
+      "languageVersion": "3.0"
     },
     {
       "name": "intl",

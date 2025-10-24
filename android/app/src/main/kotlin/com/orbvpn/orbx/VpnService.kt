@@ -8,7 +8,8 @@ import android.content.Context
 import android.content.Intent
 import android.net.VpnService
 import android.os.Build
-import android.os.ParcelFileDescriptor
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.wireguard.android.backend.GoBackend
@@ -19,15 +20,18 @@ import java.io.StringReader
 
 class OrbVpnService : VpnService() {
     private val TAG = "OrbVpnService"
-    private var vpnInterface: ParcelFileDescriptor? = null
     private var isRunning = false
+    private var isConnecting = false  // Track if connection is in progress
     
     // WireGuard backend
     private var backend: GoBackend? = null
     private var tunnel: OrbTunnel? = null
     
-    // Store current config for potential reconnection
+    // Store current config
     private var currentConfig: Config? = null
+    
+    // Handler for main thread operations
+    private val mainHandler = Handler(Looper.getMainLooper())
     
     // Notification
     private val CHANNEL_ID = "OrbVPN_Channel"
@@ -42,11 +46,16 @@ class OrbVpnService : VpnService() {
             when (newState) {
                 Tunnel.State.UP -> {
                     isRunning = true
+                    isConnecting = false  // Connection succeeded
                     updateNotification("Connected")
                     Log.d(TAG, "✅ VPN tunnel is UP")
+                    Log.d(TAG, "╔════════════════════════════════════════╗")
+                    Log.d(TAG, "║   ✅ VPN Connected Successfully!       ║")
+                    Log.d(TAG, "╚════════════════════════════════════════╝")
                 }
                 Tunnel.State.DOWN -> {
                     isRunning = false
+                    isConnecting = false  // Not connecting anymore
                     updateNotification("Disconnected")
                     Log.d(TAG, "⛔ VPN tunnel is DOWN")
                 }
@@ -62,7 +71,7 @@ class OrbVpnService : VpnService() {
         Log.d(TAG, "🎬 VPN Service created")
         createNotificationChannel()
         
-        // Initialize WireGuard backend with VpnService context
+        // Initialize WireGuard backend
         try {
             backend = GoBackend(applicationContext)
             Log.d(TAG, "✅ WireGuard backend initialized")
@@ -74,13 +83,23 @@ class OrbVpnService : VpnService() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         Log.d(TAG, "📨 onStartCommand: ${intent?.action}")
         
-        // Handle null intent (service restart)
+        // CRITICAL: Start foreground immediately to avoid crash
+        startForeground(NOTIFICATION_ID, createNotification("Starting..."))
+        
         if (intent == null) {
             Log.w(TAG, "⚠️ Service restarted with null intent")
-            // Try to reconnect if we have a saved config
-            if (currentConfig != null && !isRunning) {
+            if (currentConfig != null && !isRunning && !isConnecting) {
                 Log.d(TAG, "🔄 Attempting to restore connection...")
-                connectWithConfig(currentConfig!!)
+                Thread {
+                    connectWithConfig(currentConfig!!)
+                }.start()
+            } else if (isRunning || isConnecting) {
+                Log.d(TAG, "✅ Service already running or connecting, keeping alive")
+                // Don't stop - VPN is working or connecting
+            } else {
+                // No config to restore and not running/connecting, stop service
+                Log.w(TAG, "⚠️ No config and not running/connecting, stopping")
+                stopSelf()
             }
             return START_STICKY
         }
@@ -95,10 +114,20 @@ class OrbVpnService : VpnService() {
                 val configData = intent.getSerializableExtra(EXTRA_CONFIG) as? HashMap<String, Any>
                 
                 if (configData != null) {
-                    connect(configData)
+                    // Set connecting flag before starting thread
+                    isConnecting = true
+                    // Run connection in background thread
+                    Thread {
+                        connect(configData)
+                    }.start()
                 } else {
                     Log.e(TAG, "❌ No config provided for connection")
-                    stopSelf()
+                    // Don't stop if already connected or connecting
+                    if (!isRunning && !isConnecting) {
+                        stopSelf()
+                    } else {
+                        Log.d(TAG, "✅ Already connected or connecting, ignoring empty config")
+                    }
                 }
             }
             ACTION_DISCONNECT -> {
@@ -106,6 +135,10 @@ class OrbVpnService : VpnService() {
             }
             else -> {
                 Log.w(TAG, "⚠️ Unknown action: ${intent.action}")
+                // Don't stop if already running or connecting
+                if (!isRunning && !isConnecting) {
+                    stopSelf()
+                }
             }
         }
         
@@ -116,26 +149,23 @@ class OrbVpnService : VpnService() {
         if (isRunning) {
             Log.w(TAG, "⚠️ VPN already running, disconnecting first...")
             disconnect()
-            // Wait a bit for cleanup
             Thread.sleep(500)
         }
         
         try {
-            // Start foreground service with notification FIRST
-            Log.d(TAG, "✅ Foreground service started")
-            startForeground(NOTIFICATION_ID, createNotification("Connecting..."))
+            // Update notification
+            mainHandler.post {
+                updateNotification("Connecting...")
+            }
             
-            // Get the WireGuard config file
+            // Get config file
             val configFile = configData["configFile"] as? String 
                 ?: throw Exception("❌ Missing configFile in config")
             
             Log.d(TAG, "📝 Parsing WireGuard configuration...")
             
-            // Parse WireGuard configuration
-            val bufferedReader = BufferedReader(StringReader(configFile))
-            val config = Config.parse(bufferedReader)
-            
-            // Save config for potential reconnection
+            // Parse config
+            val config = Config.parse(BufferedReader(StringReader(configFile)))
             currentConfig = config
             
             Log.d(TAG, "✅ WireGuard config parsed successfully")
@@ -149,94 +179,43 @@ class OrbVpnService : VpnService() {
             Log.e(TAG, "❌ VPN connection failed", e)
             Log.e(TAG, "Error type: ${e.javaClass.simpleName}")
             Log.e(TAG, "Error message: ${e.message}")
-            Log.e(TAG, "Stack trace:")
             e.printStackTrace()
             
-            updateNotification("Connection Failed")
-            isRunning = false
+            isConnecting = false  // Connection failed
             
-            // Stop service on failure
-            stopSelf()
+            mainHandler.post {
+                updateNotification("Connection Failed")
+                isRunning = false
+                stopSelf()
+            }
         }
     }
     
     private fun connectWithConfig(config: Config) {
         try {
-            Log.d(TAG, "🔧 Creating VPN interface with Builder...")
+            Log.d(TAG, "🔧 Starting WireGuard tunnel with GoBackend...")
             
-            // Build VPN interface using VpnService.Builder
-            val builder = Builder()
-            
-            // Set session name
-            builder.setSession("OrbVPN")
-            Log.d(TAG, "   ✓ Session name set")
-            
-            // Add interface addresses
-            for (addr in config.`interface`.addresses) {
-                builder.addAddress(addr.address, addr.mask)
-                Log.d(TAG, "   ✓ Address added: ${addr.address}/${addr.mask}")
-            }
-            
-            // Add DNS servers
-            for (dns in config.`interface`.dnsServers) {
-                builder.addDnsServer(dns)
-                Log.d(TAG, "   ✓ DNS added: $dns")
-            }
-            
-            // Add routes for each peer
-            for (peer in config.peers) {
-                for (allowedIp in peer.allowedIps) {
-                    builder.addRoute(allowedIp.address, allowedIp.mask)
-                    Log.d(TAG, "   ✓ Route added: ${allowedIp.address}/${allowedIp.mask}")
-                }
-            }
-            
-            // Set MTU if specified
-            val mtu = config.`interface`.mtu
-            if (mtu.isPresent && mtu.get() > 0) {
-                builder.setMtu(mtu.get())
-                Log.d(TAG, "   ✓ MTU set: ${mtu.get()}")
-            }
-            
-            // Set blocking mode to false for better performance
-            builder.setBlocking(false)
-            Log.d(TAG, "   ✓ Non-blocking mode enabled")
-            
-            // CRITICAL: Establish the VPN interface
-            Log.d(TAG, "🔌 Establishing VPN interface...")
-            
-            // Close any existing interface first
-            vpnInterface?.close()
-            vpnInterface = null
-            
-            // Establish new interface
-            vpnInterface = builder.establish()
-            
-            if (vpnInterface == null) {
-                throw Exception("❌ Failed to establish VPN interface - Builder.establish() returned null")
-            }
-            
-            Log.d(TAG, "✅ VPN interface established (fd: ${vpnInterface!!.fd})")
-            
-            // Create tunnel
+            // Create tunnel if needed
             if (tunnel == null) {
                 tunnel = OrbTunnel("OrbVPN")
             }
             
-            // Use GoBackend to manage the tunnel with our established interface
-            Log.d(TAG, "🚀 Starting WireGuard tunnel with GoBackend...")
+            // Call setState - GoBackend handles everything
+            // We're already in a background thread so no timeout
+            // Don't set isRunning here - wait for onStateChange callback
             backend?.setState(tunnel, Tunnel.State.UP, config)
             
-            isRunning = true
+            Log.d(TAG, "✅ GoBackend.setState() called, waiting for tunnel state change...")
             
-            Log.d(TAG, "╔════════════════════════════════════════╗")
-            Log.d(TAG, "║   ✅ VPN Connected Successfully!       ║")
-            Log.d(TAG, "╚════════════════════════════════════════╝")
-            
-            updateNotification("Connected")
+            mainHandler.post {
+                updateNotification("Connecting...")
+            }
             
         } catch (e: Exception) {
             Log.e(TAG, "❌ Failed to establish VPN connection", e)
+            Log.e(TAG, "Error type: ${e.javaClass.simpleName}")
+            Log.e(TAG, "Error message: ${e.message}")
+            e.printStackTrace()
             throw e
         }
     }
@@ -245,23 +224,16 @@ class OrbVpnService : VpnService() {
         Log.d(TAG, "🔌 Disconnecting VPN...")
         
         try {
-            // Stop WireGuard tunnel
             if (tunnel != null && backend != null) {
                 backend?.setState(tunnel, Tunnel.State.DOWN, null)
             }
             
-            // Close VPN interface
-            vpnInterface?.close()
-            vpnInterface = null
-            
             isRunning = false
-            
             Log.d(TAG, "✅ VPN disconnected")
             
         } catch (e: Exception) {
             Log.e(TAG, "❌ Error during disconnect", e)
         } finally {
-            // Always stop foreground and service
             stopForeground(true)
             stopSelf()
         }
@@ -313,20 +285,17 @@ class OrbVpnService : VpnService() {
         super.onDestroy()
         Log.d(TAG, "🔴 Service being destroyed")
         
-        // Force cleanup
         isRunning = false
         try {
             if (tunnel != null && backend != null) {
                 backend?.setState(tunnel, Tunnel.State.DOWN, null)
             }
-            vpnInterface?.close()
         } catch (e: Exception) {
             Log.e(TAG, "❌ Error in onDestroy", e)
         }
         
         backend = null
         tunnel = null
-        vpnInterface = null
         currentConfig = null
         
         Log.d(TAG, "Service destroyed")
