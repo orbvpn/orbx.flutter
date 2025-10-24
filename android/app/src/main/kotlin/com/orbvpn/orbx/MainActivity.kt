@@ -51,21 +51,19 @@ class MainActivity : FlutterActivity() {
         Log.d(TAG, "OrbX MainActivity created")
     }
     
-    override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
-        super.configureFlutterEngine(flutterEngine)
-        
-        Log.d(TAG, "Configuring Flutter engine")
-        
-// Initialize managers
-// IMPORTANT: Use 'this' (Activity context) for VPN permission checks
-wireguardManager = WireGuardManager(this)
-protocolHandler = ProtocolHandler(this)
-connectionManager = ConnectionManager(
-    this,
-    wireguardManager,
-    protocolHandler
-)
-        
+override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
+    super.configureFlutterEngine(flutterEngine)
+    
+    // Initialize managers
+    // IMPORTANT: Use 'this' (Activity context) for VPN permission checks
+    wireguardManager = WireGuardManager(this)  
+    protocolHandler = ProtocolHandler(this)    
+    connectionManager = ConnectionManager(
+        this,  
+        wireguardManager,
+        protocolHandler
+    )
+
         // Setup Method Channel (for function calls from Flutter)
         setupMethodChannel(flutterEngine)
         
