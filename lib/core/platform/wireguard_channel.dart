@@ -26,8 +26,7 @@ class WireGuardChannel {
         'configFile': config.toConfigFile(),
         'privateKey': config.privateKey,
         'serverPublicKey': config.serverPublicKey,
-        'serverEndpoint':
-            config.serverEndpoint, // ✅ FIXED: Changed from 'endpoint'
+        'serverEndpoint': config.serverEndpoint,
         'allocatedIp': config.allocatedIp,
         'dns': config.dns,
         'mtu': config.mtu,
@@ -71,10 +70,22 @@ class WireGuardChannel {
     }
   }
 
-// Listen to connection state changes
+  // ✅ FIXED: Listen to connection state changes
+  // Now handles both String and Map formats from native code
   static Stream<String> get connectionStateStream {
     return const EventChannel(
       'com.orbvpn.orbx/vpn_state',
-    ).receiveBroadcastStream().map((event) => event as String);
+    ).receiveBroadcastStream().map((event) {
+      // Handle both String and Map formats from Android
+      if (event is String) {
+        return event;
+      } else if (event is Map) {
+        // Android sends: mapOf("state" to "connected")
+        return event['state'] as String? ?? 'unknown';
+      } else {
+        // Fallback for unexpected formats
+        return 'unknown';
+      }
+    });
   }
 }
