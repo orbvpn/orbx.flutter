@@ -81,4 +81,7 @@ dependencies {
     
     // Kotlin coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
+
+    // LocalBroadcastManager - ADD THIS LINE
+    implementation("androidx.localbroadcastmanager:localbroadcastmanager:1.1.0")
 }

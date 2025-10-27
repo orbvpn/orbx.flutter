@@ -160,7 +160,18 @@ class ConnectionManager(
         }
     }
     
+    /**
+     * Stop connection monitoring (alias for stopMonitoring)
+     */
+    fun stopConnectionMonitoring() {
+        stopMonitoring()
+    }
+    
+    /**
+     * Stop connection monitoring
+     */
     fun stopMonitoring() {
         scope.cancel()
+        Log.d(TAG, "Connection monitoring stopped")
     }
 }

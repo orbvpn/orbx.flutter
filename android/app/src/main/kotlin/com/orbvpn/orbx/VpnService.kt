@@ -12,16 +12,20 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import androidx.localbroadcastmanager.content.LocalBroadcastManager
+import com.wireguard.android.backend.Backend
 import com.wireguard.android.backend.GoBackend
 import com.wireguard.android.backend.Tunnel
 import com.wireguard.config.Config
 import java.io.BufferedReader
 import java.io.StringReader
+import kotlinx.coroutines.*
+
 
 class OrbVpnService : VpnService() {
     private val TAG = "OrbVpnService"
     private var isRunning = false
-    private var isConnecting = false  // Track if connection is in progress
+    private var isConnecting = false
     
     // WireGuard backend
     private var backend: GoBackend? = null
@@ -46,18 +50,24 @@ class OrbVpnService : VpnService() {
             when (newState) {
                 Tunnel.State.UP -> {
                     isRunning = true
-                    isConnecting = false  // Connection succeeded
+                    isConnecting = false
                     updateNotification("Connected")
                     Log.d(TAG, "✅ VPN tunnel is UP")
                     Log.d(TAG, "╔════════════════════════════════════════╗")
                     Log.d(TAG, "║   ✅ VPN Connected Successfully!       ║")
                     Log.d(TAG, "╚════════════════════════════════════════╝")
+                    
+                    // CRITICAL: Broadcast state change to MainActivity
+                    broadcastStateChange("connected")
                 }
                 Tunnel.State.DOWN -> {
                     isRunning = false
-                    isConnecting = false  // Not connecting anymore
+                    isConnecting = false
                     updateNotification("Disconnected")
                     Log.d(TAG, "⛔ VPN tunnel is DOWN")
+                    
+                    // CRITICAL: Broadcast state change to MainActivity
+                    broadcastStateChange("disconnected")
                 }
                 else -> {
                     Log.d(TAG, "🔄 Tunnel state: $newState")
@@ -95,9 +105,7 @@ class OrbVpnService : VpnService() {
                 }.start()
             } else if (isRunning || isConnecting) {
                 Log.d(TAG, "✅ Service already running or connecting, keeping alive")
-                // Don't stop - VPN is working or connecting
             } else {
-                // No config to restore and not running/connecting, stop service
                 Log.w(TAG, "⚠️ No config and not running/connecting, stopping")
                 stopSelf()
             }
@@ -114,15 +122,12 @@ class OrbVpnService : VpnService() {
                 val configData = intent.getSerializableExtra(EXTRA_CONFIG) as? HashMap<String, Any>
                 
                 if (configData != null) {
-                    // Set connecting flag before starting thread
                     isConnecting = true
-                    // Run connection in background thread
                     Thread {
                         connect(configData)
                     }.start()
                 } else {
                     Log.e(TAG, "❌ No config provided for connection")
-                    // Don't stop if already connected or connecting
                     if (!isRunning && !isConnecting) {
                         stopSelf()
                     } else {
@@ -135,7 +140,6 @@ class OrbVpnService : VpnService() {
             }
             else -> {
                 Log.w(TAG, "⚠️ Unknown action: ${intent.action}")
-                // Don't stop if already running or connecting
                 if (!isRunning && !isConnecting) {
                     stopSelf()
                 }
@@ -153,18 +157,15 @@ class OrbVpnService : VpnService() {
         }
         
         try {
-            // Update notification
             mainHandler.post {
                 updateNotification("Connecting...")
             }
             
-            // Get config file
             val configFile = configData["configFile"] as? String 
                 ?: throw Exception("❌ Missing configFile in config")
             
             Log.d(TAG, "📝 Parsing WireGuard configuration...")
             
-            // Parse config
             val config = Config.parse(BufferedReader(StringReader(configFile)))
             currentConfig = config
             
@@ -181,11 +182,12 @@ class OrbVpnService : VpnService() {
             Log.e(TAG, "Error message: ${e.message}")
             e.printStackTrace()
             
-            isConnecting = false  // Connection failed
+            isConnecting = false
             
             mainHandler.post {
                 updateNotification("Connection Failed")
                 isRunning = false
+                broadcastStateChange("error")
                 stopSelf()
             }
         }
@@ -195,14 +197,10 @@ class OrbVpnService : VpnService() {
         try {
             Log.d(TAG, "🔧 Starting WireGuard tunnel with GoBackend...")
             
-            // Create tunnel if needed
             if (tunnel == null) {
                 tunnel = OrbTunnel("OrbVPN")
             }
             
-            // Call setState - GoBackend handles everything
-            // We're already in a background thread so no timeout
-            // Don't set isRunning here - wait for onStateChange callback
             backend?.setState(tunnel, Tunnel.State.UP, config)
             
             Log.d(TAG, "✅ GoBackend.setState() called, waiting for tunnel state change...")
@@ -237,6 +235,17 @@ class OrbVpnService : VpnService() {
             stopForeground(true)
             stopSelf()
         }
+    }
+    
+    /**
+     * Broadcast state change to MainActivity via LocalBroadcastManager
+     */
+    private fun broadcastStateChange(state: String) {
+        Log.d(TAG, "📡 Broadcasting state change: $state")
+        val intent = Intent(ACTION_VPN_STATE_CHANGED).apply {
+            putExtra(EXTRA_VPN_STATE, state)
+        }
+        LocalBroadcastManager.getInstance(this).sendBroadcast(intent)
     }
     
     private fun createNotificationChannel() {
@@ -311,5 +320,9 @@ class OrbVpnService : VpnService() {
         const val ACTION_CONNECT = "com.orbvpn.orbx.CONNECT"
         const val ACTION_DISCONNECT = "com.orbvpn.orbx.DISCONNECT"
         const val EXTRA_CONFIG = "config"
+        
+        // Broadcast action for state changes
+        const val ACTION_VPN_STATE_CHANGED = "com.orbvpn.orbx.VPN_STATE_CHANGED"
+        const val EXTRA_VPN_STATE = "vpn_state"
     }
 }

@@ -1,9 +1,13 @@
 package com.orbvpn.orbx
 
 import android.app.Activity
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.net.VpnService
 import android.os.Bundle
+import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.EventChannel
@@ -42,6 +46,8 @@ class MainActivity : FlutterActivity() {
     
     // Event sink for state changes
     private var eventSink: EventChannel.EventSink? = null
+
+    private var vpnStateReceiver: BroadcastReceiver? = null
     
     // Coroutine scope for async operations
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
@@ -49,20 +55,22 @@ class MainActivity : FlutterActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         Log.d(TAG, "OrbX MainActivity created")
+        // Setup VPN state receiver
+        setupVpnStateReceiver()
     }
     
-override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
-    super.configureFlutterEngine(flutterEngine)
-    
-    // Initialize managers
-    // IMPORTANT: Use 'this' (Activity context) for VPN permission checks
-    wireguardManager = WireGuardManager(this)  
-    protocolHandler = ProtocolHandler(this)    
-    connectionManager = ConnectionManager(
-        this,  
-        wireguardManager,
-        protocolHandler
-    )
+    override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
+        super.configureFlutterEngine(flutterEngine)
+        
+        // Initialize managers
+        // IMPORTANT: Use 'this' (Activity context) for VPN permission checks
+        wireguardManager = WireGuardManager(this)  
+        protocolHandler = ProtocolHandler(this)    
+        connectionManager = ConnectionManager(
+            this,  
+            wireguardManager,
+            protocolHandler
+        )
 
         // Setup Method Channel (for function calls from Flutter)
         setupMethodChannel(flutterEngine)
@@ -71,6 +79,32 @@ override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         setupEventChannel(flutterEngine)
         
         Log.d(TAG, "Flutter engine configured successfully")
+    }
+    
+    /**
+     * Setup VPN state broadcast receiver
+     */
+    private fun setupVpnStateReceiver() {
+        vpnStateReceiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context?, intent: Intent?) {
+                val state = intent?.getStringExtra(OrbVpnService.EXTRA_VPN_STATE) ?: return
+                Log.d(TAG, "📡 Received VPN state broadcast: $state")
+                
+                scope.launch {
+                    sendStateUpdate(mapOf(
+                        "state" to state,
+                        "timestamp" to System.currentTimeMillis()
+                    ))
+                }
+            }
+        }
+        
+        LocalBroadcastManager.getInstance(this).registerReceiver(
+            vpnStateReceiver!!,
+            IntentFilter(OrbVpnService.ACTION_VPN_STATE_CHANGED)
+        )
+        
+        Log.d(TAG, "✅ VPN state receiver registered")
     }
     
     /**
@@ -196,31 +230,39 @@ override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
                     }
                 }
                 
-                // Disconnect VPN
-"disconnect" -> {
-    try {
-        Log.d(TAG, "Disconnect requested")
-        
-        // Stop foreground service
-        val serviceIntent = Intent(applicationContext, OrbVpnService::class.java)
-        stopService(serviceIntent)
-        
-        // Disconnect WireGuard
-        val success = wireguardManager.disconnect()
-        result.success(success)
-        
-        // Send state update
-        sendStateUpdate(mapOf("state" to "disconnected"))
-        
-        Log.d(TAG, "Disconnect completed")
-        
-    } catch (e: Exception) {
-        Log.e(TAG, "Failed to disconnect", e)
-        result.error("DISCONNECT_ERROR", e.message, null)
-    }
-}
+                // Disconnect
+                "disconnect" -> {
+                    scope.launch {
+                        try {
+                            Log.d(TAG, "Disconnecting VPN")
+                            
+                            sendStateUpdate(mapOf("state" to "disconnecting"))
+                            
+                            // Stop monitoring
+                            connectionManager.stopConnectionMonitoring()
+                            
+                            // Disconnect VPN
+                            wireguardManager.disconnect()
+                            
+                            // Stop service
+                            stopVpnService()
+                            
+                            withContext(Dispatchers.Main) {
+                                result.success(true)
+                                sendStateUpdate(mapOf("state" to "disconnected"))
+                                Log.d(TAG, "VPN disconnected successfully")
+                            }
+                            
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Disconnect error", e)
+                            withContext(Dispatchers.Main) {
+                                result.error("DISCONNECT_ERROR", e.message, null)
+                            }
+                        }
+                    }
+                }
                 
-                // Get connection status
+                // Get current connection status
                 "getStatus" -> {
                     try {
                         val status = wireguardManager.getStatus()
@@ -392,8 +434,8 @@ override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
                     if (success) {
                         startVpnService()
                         result.success(true)
-                        sendStateUpdate(mapOf("state" to "connected"))
-                        Log.d(TAG, "VPN connected successfully")
+                        // DON'T send "connected" here - wait for broadcast from service
+                        Log.d(TAG, "VPN service started, waiting for connection...")
                     } else {
                         result.success(false)
                         sendStateUpdate(mapOf("state" to "disconnected"))
@@ -528,10 +570,13 @@ override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
     override fun onDestroy() {
         super.onDestroy()
         
-        // Clean up
-        scope.cancel()
-        connectionManager.stopMonitoring()
+        // Unregister receiver
+        vpnStateReceiver?.let {
+            LocalBroadcastManager.getInstance(this).unregisterReceiver(it)
+            Log.d(TAG, "✅ VPN state receiver unregistered")
+        }
         
-        Log.d(TAG, "MainActivity destroyed")
+        // Cancel coroutines
+        scope.cancel()
     }
 }
