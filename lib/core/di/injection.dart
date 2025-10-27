@@ -1,3 +1,5 @@
+// lib/core/di/dependency_injection.dart
+
 import 'package:get_it/get_it.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:logger/logger.dart';
@@ -59,11 +61,13 @@ Future<void> setupDependencies() async {
     _logger.i('✅ Server repository registered');
 
     // VPN Services
+    // ✅ FIX: WireGuardService doesn't need AuthRepository
     getIt.registerSingleton<WireGuardService>(
-      WireGuardService(getIt<AuthRepository>()),
+      WireGuardService(),
     );
     _logger.i('✅ WireGuard service registered');
 
+    // ✅ FIX: MimicryManager DOES need AuthRepository
     getIt.registerSingleton<MimicryManager>(
       MimicryManager(getIt<AuthRepository>()),
     );

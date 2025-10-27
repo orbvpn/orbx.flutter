@@ -1,3 +1,5 @@
+// lib/core/services/mimicry_manager.dart
+
 import 'package:dio/dio.dart';
 import '../constants/mimicry_protocols.dart';
 import '../../data/models/server.dart';
@@ -22,7 +24,8 @@ class MimicryManager {
     MimicryProtocol protocol,
   ) async {
     try {
-      final token = await _authRepo.getAccessToken();
+      // ✅ FIX: Use getCachedToken() instead of getAccessToken()
+      final token = _authRepo.getCachedToken();
       if (token == null) {
         return ProtocolStatus.unknown;
       }
@@ -30,7 +33,7 @@ class MimicryManager {
       final stopwatch = Stopwatch()..start();
 
       final response = await _dio.get(
-        'https://${server.ipAddress}:${server.port}${protocol.endpoint}',
+        'https://${server.endpoint}:${server.port}${protocol.endpoint}',
         options: Options(
           headers: {
             'Authorization': 'Bearer $token',
@@ -165,12 +168,12 @@ class MimicryManager {
     MimicryProtocol protocol,
     List<int> data,
   ) async {
-    final token = await _authRepo.getAccessToken();
+    final token = _authRepo.getCachedToken();
     if (token == null) throw Exception('Not authenticated');
 
     try {
       await _dio.post(
-        'https://${server.ipAddress}:${server.port}${protocol.endpoint}',
+        'https://${server.endpoint}:${server.port}${protocol.endpoint}',
         data: data,
         options: Options(
           headers: {

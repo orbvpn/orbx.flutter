@@ -40,6 +40,16 @@ class AuthProvider with ChangeNotifier {
   bool get isAuthenticated => _status == AuthStatus.authenticated;
   bool get hasError => _errorMessage != null;
 
+  /// ✅ Get auth token from repository (synchronous)
+  String? get authToken {
+    try {
+      return _authRepository.getCachedToken();
+    } catch (e) {
+      _logger.e('Failed to get auth token: $e');
+      return null;
+    }
+  }
+
   // ==========================================
   // Authentication Methods
   // ==========================================

@@ -1,104 +1,92 @@
-/// Authentication Repository
-///
-/// Handles all authentication-related business logic including:
-/// - Login
-/// - Registration
-/// - Logout
-/// - Token management
-/// - User session management
-library;
+// lib/data/repositories/auth_repository.dart
 
-import 'package:logger/logger.dart';
+import 'dart:convert';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:graphql_flutter/graphql_flutter.dart';
+import 'package:logger/logger.dart';
 
 import '../models/user.dart';
 import '../models/auth_response.dart';
 import '../api/graphql/client.dart';
-import '../api/graphql/queries.dart';
-import '../../core/constants/api_constants.dart';
 
 class AuthRepository {
   final GraphQLService _graphQLService;
   final FlutterSecureStorage _secureStorage;
   final Logger _logger = Logger();
 
-  User? _currentUser;
+  // ✅ Cache access token only (backend doesn't return refresh token)
+  String? _cachedAccessToken;
 
   AuthRepository({
-    GraphQLService? graphQLService,
-    FlutterSecureStorage? secureStorage,
-  })  : _graphQLService = graphQLService ?? GraphQLService.instance,
-        _secureStorage = secureStorage ?? const FlutterSecureStorage();
+    required GraphQLService graphQLService,
+    required FlutterSecureStorage secureStorage,
+  })  : _graphQLService = graphQLService,
+        _secureStorage = secureStorage;
 
-  /// Get current authenticated user
-  User? get currentUser => _currentUser;
-
-  /// Check if user is currently authenticated
-  Future<bool> isAuthenticated() async {
-    return await _graphQLService.isAuthenticated();
+  /// Get cached access token synchronously
+  String? getCachedToken() {
+    return _cachedAccessToken;
   }
 
-  /// Get the current access token
-  ///
-  /// Returns the JWT access token if available, null otherwise
-  Future<String?> getAccessToken() async {
-    return await _graphQLService.getAccessToken();
-  }
-
-  /// Login with email and password
-  ///
-  /// Returns [AuthResponse] containing tokens and user info
-  /// Throws [Exception] on failure
+  /// Login user
   Future<AuthResponse> login(String email, String password) async {
     try {
       _logger.i('Attempting login for: $email');
 
-      // Validate inputs
-      if (email.isEmpty || password.isEmpty) {
-        throw Exception('Email and password are required');
-      }
-
-      if (!_isValidEmail(email)) {
-        throw Exception('Invalid email format');
-      }
-
-      // Execute login mutation
-      final result = await _graphQLService.mutate(
-        GraphQLQueries.login,
-        variables: {
-          'email': email,
-          'password': password,
-        },
-        operationName: ApiConstants.loginOperation,
+      final result = await _graphQLService.client.mutate(
+        MutationOptions(
+          document: gql(r'''
+            mutation Login($email: String!, $password: String!) {
+              login(email: $email, password: $password) {
+                accessToken
+                user {
+                  id
+                  email
+                  username
+                  role
+                  createdAt
+                  profile {
+                    firstName
+                    lastName
+                    phone
+                    country
+                  }
+                }
+              }
+            }
+          '''),
+          variables: {'email': email, 'password': password},
+        ),
       );
 
-      // Parse response
-      final authResponse = AuthResponse.fromLoginJson(result);
+      if (result.hasException) {
+        throw Exception(result.exception.toString());
+      }
 
-      // Save tokens
-      await _graphQLService.saveToken(
-        authResponse.accessToken,
-        authResponse.refreshToken,
-      );
+      final data = result.data!['login'] as Map<String, dynamic>;
+      final accessToken = data['accessToken'] as String;
+      final userData = data['user'] as Map<String, dynamic>;
+
+      // ✅ Cache access token in memory
+      _cachedAccessToken = accessToken;
+
+      // Save token to secure storage
+      await _secureStorage.write(key: 'auth_token', value: accessToken);
 
       // Save user data
-      await _saveUserData(authResponse.user);
+      await _secureStorage.write(key: 'user_data', value: jsonEncode(userData));
 
-      // Set current user
-      _currentUser = authResponse.user;
+      final user = User.fromJson(userData);
+      _logger.i('Login successful: ${user.email}');
 
-      _logger.i('Login successful for: ${authResponse.user.email}');
-      return authResponse;
+      return AuthResponse(accessToken: accessToken, user: user);
     } catch (e) {
       _logger.e('Login failed: $e');
       rethrow;
     }
   }
 
-  /// Register new user account
-  ///
-  /// Returns [AuthResponse] containing tokens and user info
-  /// Throws [Exception] on failure
+  /// Register new user
   Future<AuthResponse> register({
     required String email,
     required String password,
@@ -109,85 +97,152 @@ class AuthRepository {
     try {
       _logger.i('Attempting registration for: $email');
 
-      // Validate inputs
-      if (email.isEmpty ||
-          password.isEmpty ||
-          firstName.isEmpty ||
-          lastName.isEmpty) {
-        throw Exception('All fields are required');
-      }
-
-      if (!_isValidEmail(email)) {
-        throw Exception('Invalid email format');
-      }
-
-      if (password.length < ApiConstants.minPasswordLength) {
-        throw Exception(
-          'Password must be at least ${ApiConstants.minPasswordLength} characters',
-        );
-      }
-
-      if (password.length > ApiConstants.maxPasswordLength) {
-        throw Exception(
-          'Password must be less than ${ApiConstants.maxPasswordLength} characters',
-        );
-      }
-
-      // Prepare input
-      final input = {
-        'email': email,
-        'password': password,
-        'firstName': firstName,
-        'lastName': lastName,
-        if (referralCode != null && referralCode.isNotEmpty)
-          'referral': referralCode,
-      };
-
-      // Execute register mutation
-      final result = await _graphQLService.mutate(
-        GraphQLQueries.register,
-        variables: {'input': input},
-        operationName: ApiConstants.registerOperation,
+      final result = await _graphQLService.client.mutate(
+        MutationOptions(
+          document: gql(r'''
+            mutation Signup(
+              $email: String!
+              $password: String!
+              $referral: String
+            ) {
+              signup(
+                email: $email
+                password: $password
+                referral: $referral
+              ) {
+                success
+                message
+              }
+            }
+          '''),
+          variables: {
+            'email': email,
+            'password': password,
+            if (referralCode != null) 'referral': referralCode,
+          },
+        ),
       );
 
-      // Parse response
-      final authResponse = AuthResponse.fromRegisterJson(result);
+      if (result.hasException) {
+        throw Exception(result.exception.toString());
+      }
 
-      // Save tokens
-      await _graphQLService.saveToken(
-        authResponse.accessToken,
-        authResponse.refreshToken,
-      );
+      final data = result.data!['signup'] as Map<String, dynamic>;
+      final success = data['success'] as bool;
+      final message = data['message'] as String;
 
-      // Save user data
-      await _saveUserData(authResponse.user);
+      if (!success) {
+        throw Exception(message);
+      }
 
-      // Set current user
-      _currentUser = authResponse.user;
-
-      _logger.i('Registration successful for: ${authResponse.user.email}');
-      return authResponse;
+      // After signup, need to login
+      _logger.i('Signup successful, logging in...');
+      return await login(email, password);
     } catch (e) {
       _logger.e('Registration failed: $e');
       rethrow;
     }
   }
 
-  /// Logout current user
-  ///
-  /// Clears all tokens and user data from storage
+  /// ✅ Refresh authentication token
+  Future<bool> refreshToken() async {
+    try {
+      _logger.i('Attempting to refresh token');
+
+      // Get current access token (backend uses it as refresh token)
+      final currentToken =
+          _cachedAccessToken ?? await _secureStorage.read(key: 'auth_token');
+
+      if (currentToken == null || currentToken.isEmpty) {
+        _logger.w('No token to refresh');
+        return false;
+      }
+
+      // Call refresh token mutation
+      final result = await _graphQLService.client.mutate(
+        MutationOptions(
+          document: gql(r'''
+            mutation RefreshToken($refreshToken: String!) {
+              refreshToken(refreshToken: $refreshToken) {
+                accessToken
+                user {
+                  id
+                  email
+                  username
+                  role
+                  createdAt
+                  profile {
+                    firstName
+                    lastName
+                    phone
+                    country
+                  }
+                }
+              }
+            }
+          '''),
+          variables: {'refreshToken': currentToken},
+        ),
+      );
+
+      if (result.hasException) {
+        _logger.e('Token refresh failed: ${result.exception}');
+        return false;
+      }
+
+      final data = result.data!['refreshToken'] as Map<String, dynamic>;
+      final newAccessToken = data['accessToken'] as String;
+      final userData = data['user'] as Map<String, dynamic>;
+
+      // ✅ Cache new token in memory
+      _cachedAccessToken = newAccessToken;
+
+      // Save new token to secure storage
+      await _secureStorage.write(key: 'auth_token', value: newAccessToken);
+
+      // Update user data
+      await _secureStorage.write(key: 'user_data', value: jsonEncode(userData));
+
+      _logger.i('✅ Token refreshed successfully');
+      return true;
+    } catch (e) {
+      _logger.e('Token refresh error: $e');
+      return false;
+    }
+  }
+
+  /// Load user from storage
+  Future<User?> loadUser() async {
+    try {
+      // ✅ Load and cache token
+      _cachedAccessToken = await _secureStorage.read(key: 'auth_token');
+
+      if (_cachedAccessToken == null) {
+        return null;
+      }
+
+      final userDataJson = await _secureStorage.read(key: 'user_data');
+
+      if (userDataJson == null) {
+        return null;
+      }
+
+      final userData = jsonDecode(userDataJson) as Map<String, dynamic>;
+      return User.fromJson(userData);
+    } catch (e) {
+      _logger.e('Failed to load user: $e');
+      return null;
+    }
+  }
+
+  /// Logout user
   Future<void> logout() async {
     try {
-      _logger.i('Logging out user: ${_currentUser?.email}');
+      // ✅ Clear cached token
+      _cachedAccessToken = null;
 
-      // Clear tokens
-      await _graphQLService.clearTokens();
-
-      // Clear user data
-      await _clearUserData();
-
-      // Clear current user
-      _currentUser = null;
+      await _secureStorage.delete(key: 'auth_token');
+      await _secureStorage.delete(key: 'user_data');
 
       _logger.i('Logout successful');
     } catch (e) {
@@ -196,62 +251,53 @@ class AuthRepository {
     }
   }
 
-  /// Load user from secure storage
-  ///
-  /// Attempts to restore user session from stored data
-  Future<User?> loadUser() async {
-    try {
-      _logger.i('Loading user from storage');
-
-      // Check if authenticated
-      final isAuth = await isAuthenticated();
-      if (!isAuth) {
-        _logger.w('No authentication token found');
-        return null;
-      }
-
-      // Load user data from storage
-      final userData = await _loadUserData();
-      if (userData == null) {
-        _logger.w('No user data found in storage');
-        return null;
-      }
-
-      // Set current user
-      _currentUser = userData;
-
-      _logger.i('User loaded successfully: ${userData.email}');
-      return userData;
-    } catch (e) {
-      _logger.e('Failed to load user: $e');
-      return null;
-    }
-  }
-
-  /// Refresh user profile from API
-  ///
-  /// Fetches latest user data from server
+  /// Refresh user profile from backend
   Future<User> refreshUser() async {
     try {
       _logger.i('Refreshing user profile');
 
-      // Execute query to get user profile
-      final result = await _graphQLService.query(
-        GraphQLQueries.getProfile,
-        operationName: 'GetUserProfile',
+      final token =
+          _cachedAccessToken ?? await _secureStorage.read(key: 'auth_token');
+
+      if (token == null) {
+        throw Exception('No authentication token found');
+      }
+
+      final result = await _graphQLService.client.query(
+        QueryOptions(
+          document: gql(r'''
+            query GetCurrentUser {
+              me {
+                id
+                email
+                username
+                role
+                createdAt
+                profile {
+                  firstName
+                  lastName
+                  phone
+                  country
+                }
+              }
+            }
+          '''),
+          fetchPolicy: FetchPolicy.networkOnly,
+        ),
       );
 
-      // Parse user from response
-      final userData = result['me'] as Map<String, dynamic>;
-      final user = User.fromJson(userData);
+      if (result.hasException) {
+        throw Exception(result.exception.toString());
+      }
+
+      final userData = result.data!['me'] as Map<String, dynamic>;
 
       // Update stored user data
-      await _saveUserData(user);
+      await _secureStorage.write(key: 'user_data', value: jsonEncode(userData));
 
-      // Update current user
-      _currentUser = user;
+      final user = User.fromJson(userData);
+      _logger.i('User profile refreshed');
 
-      _logger.i('User profile refreshed successfully');
       return user;
     } catch (e) {
       _logger.e('Failed to refresh user: $e');
@@ -259,45 +305,7 @@ class AuthRepository {
     }
   }
 
-  /// Refresh access token using refresh token
-  ///
-  /// Returns true if refresh was successful, false otherwise
-  Future<bool> refreshToken() async {
-    try {
-      _logger.i('Attempting to refresh access token');
-
-      // Get stored refresh token
-      final refreshToken = await _secureStorage.read(key: 'refresh_token');
-
-      if (refreshToken == null || refreshToken.isEmpty) {
-        _logger.w('No refresh token available');
-        return false;
-      }
-
-      // Call refresh token mutation
-      final result = await _graphQLService.mutate(
-        GraphQLQueries.refreshToken,
-        variables: {'refreshToken': refreshToken},
-        operationName: 'RefreshToken',
-      );
-
-      // Parse response
-      final refreshData = result['refreshToken'] as Map<String, dynamic>;
-      final newAccessToken = refreshData['accessToken'] as String;
-      final newRefreshToken = refreshData['refreshToken'] as String?;
-
-      // Save new tokens
-      await _graphQLService.saveToken(newAccessToken, newRefreshToken);
-
-      _logger.i('Token refreshed successfully');
-      return true;
-    } catch (e) {
-      _logger.e('Token refresh failed: $e');
-      return false;
-    }
-  }
-
-  /// Change user password
+  /// Change password
   Future<bool> changePassword({
     required String oldPassword,
     required String newPassword,
@@ -305,33 +313,24 @@ class AuthRepository {
     try {
       _logger.i('Attempting to change password');
 
-      if (newPassword.length < ApiConstants.minPasswordLength) {
-        throw Exception(
-          'Password must be at least ${ApiConstants.minPasswordLength} characters',
-        );
-      }
-
-      // Execute change password mutation (you'll need to add this to queries.dart)
-      final mutation = '''
-        mutation ChangePassword(\$oldPassword: String!, \$password: String!) {
-          changePassword(oldPassword: \$oldPassword, password: \$password)
-        }
-      ''';
-
-      final result = await _graphQLService.mutate(
-        mutation,
-        variables: {
-          'oldPassword': oldPassword,
-          'password': newPassword,
-        },
+      final result = await _graphQLService.client.mutate(
+        MutationOptions(
+          document: gql(r'''
+            mutation ChangePassword($oldPassword: String!, $password: String!) {
+              changePassword(oldPassword: $oldPassword, password: $password)
+            }
+          '''),
+          variables: {'oldPassword': oldPassword, 'password': newPassword},
+        ),
       );
 
-      final success = result['changePassword'] as bool;
-
-      if (success) {
-        _logger.i('Password changed successfully');
+      if (result.hasException) {
+        throw Exception(result.exception.toString());
       }
 
+      final success = result.data!['changePassword'] as bool;
+
+      _logger.i('Password change result: $success');
       return success;
     } catch (e) {
       _logger.e('Failed to change password: $e');
@@ -344,28 +343,24 @@ class AuthRepository {
     try {
       _logger.i('Requesting password reset for: $email');
 
-      if (!_isValidEmail(email)) {
-        throw Exception('Invalid email format');
-      }
-
-      // Execute reset password mutation
-      final mutation = '''
-        mutation RequestResetPassword(\$email: String!) {
-          requestResetPassword(email: \$email)
-        }
-      ''';
-
-      final result = await _graphQLService.mutate(
-        mutation,
-        variables: {'email': email},
+      final result = await _graphQLService.client.mutate(
+        MutationOptions(
+          document: gql(r'''
+            mutation RequestPasswordReset($email: String!) {
+              requestResetPassword(email: $email)
+            }
+          '''),
+          variables: {'email': email},
+        ),
       );
 
-      final success = result['requestResetPassword'] as bool;
-
-      if (success) {
-        _logger.i('Password reset email sent to: $email');
+      if (result.hasException) {
+        throw Exception(result.exception.toString());
       }
 
+      final success = result.data!['requestResetPassword'] as bool;
+
+      _logger.i('Password reset request result: $success');
       return success;
     } catch (e) {
       _logger.e('Failed to request password reset: $e');
@@ -373,69 +368,13 @@ class AuthRepository {
     }
   }
 
-  // ==========================================
-  // Private Helper Methods
-  // ==========================================
-
-  /// Validate email format
-  bool _isValidEmail(String email) {
-    final regex = RegExp(ApiConstants.emailPattern);
-    return regex.hasMatch(email);
-  }
-
-  /// Save user data to secure storage
-  Future<void> _saveUserData(User user) async {
+  /// Get stored auth token (async)
+  Future<String?> getToken() async {
     try {
-      final userJson = user.toJson();
-      await _secureStorage.write(
-        key: 'user_data',
-        value: userJson.toString(),
-      );
-      await _secureStorage.write(
-        key: ApiConstants.userIdKey,
-        value: user.id,
-      );
-      await _secureStorage.write(
-        key: ApiConstants.userEmailKey,
-        value: user.email,
-      );
+      return await _secureStorage.read(key: 'auth_token');
     } catch (e) {
-      _logger.e('Error saving user data: $e');
-      rethrow;
-    }
-  }
-
-  /// Load user data from secure storage
-  Future<User?> _loadUserData() async {
-    try {
-      final userDataString = await _secureStorage.read(key: 'user_data');
-      if (userDataString == null) return null;
-
-      // For simplicity, we'll use stored email and id to reconstruct basic user
-      // In production, you might want to fetch from API or use better serialization
-      final userId = await _secureStorage.read(key: ApiConstants.userIdKey);
-      final userEmail =
-          await _secureStorage.read(key: ApiConstants.userEmailKey);
-
-      if (userId == null || userEmail == null) return null;
-
-      // Fetch full user profile from API
-      return await refreshUser();
-    } catch (e) {
-      _logger.e('Error loading user data: $e');
+      _logger.e('Failed to get token: $e');
       return null;
-    }
-  }
-
-  /// Clear user data from secure storage
-  Future<void> _clearUserData() async {
-    try {
-      await _secureStorage.delete(key: 'user_data');
-      await _secureStorage.delete(key: ApiConstants.userIdKey);
-      await _secureStorage.delete(key: ApiConstants.userEmailKey);
-    } catch (e) {
-      _logger.e('Error clearing user data: $e');
-      rethrow;
     }
   }
 }

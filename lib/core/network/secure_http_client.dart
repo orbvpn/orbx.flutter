@@ -1,3 +1,5 @@
+// lib/core/network/secure_http_client.dart
+
 import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:dio/io.dart';
@@ -53,7 +55,7 @@ class SecureHttpClient {
 
     // Add authentication interceptor (if auth repository provided)
     if (authRepository != null) {
-      dio.interceptors.add(_AuthInterceptor(authRepository));
+      dio.interceptors.add(_AuthInterceptor(authRepository, dio));
     }
 
     // Add retry interceptor
@@ -77,7 +79,6 @@ class SecureHttpClient {
 
         // Configure automatic certificate validation
         client.badCertificateCallback = (cert, host, port) {
-          // Use automatic certificate manager (TOFU approach)
           return CertificateManager.validateCertificate(
             cert,
             host,
@@ -214,13 +215,14 @@ class _ErrorInterceptor extends Interceptor {
   }
 }
 
-/// Authentication interceptor
-///
-/// Automatically adds Bearer token to requests and handles 401 errors
+/// ✅ Authentication interceptor with full refresh token support
 class _AuthInterceptor extends Interceptor {
   final AuthRepository _authRepository;
+  final Dio _dio;
+  bool _isRefreshing = false;
+  final List<void Function()> _pendingRequests = [];
 
-  _AuthInterceptor(this._authRepository);
+  _AuthInterceptor(this._authRepository, this._dio);
 
   @override
   void onRequest(
@@ -228,13 +230,8 @@ class _AuthInterceptor extends Interceptor {
     RequestInterceptorHandler handler,
   ) async {
     try {
-      // Skip auth for retry requests after refresh to prevent loops
-      if (options.extra['isRetryAfterRefresh'] == true) {
-        return handler.next(options);
-      }
-
-      // Get access token from repository
-      final token = await _authRepository.getAccessToken();
+      // Get access token from repository (synchronous)
+      final token = _authRepository.getCachedToken();
 
       if (token != null && token.isNotEmpty) {
         // Add Bearer token to Authorization header
@@ -259,20 +256,42 @@ class _AuthInterceptor extends Interceptor {
 
   @override
   void onError(DioException err, ErrorInterceptorHandler handler) async {
-    // Prevent infinite refresh loops
-    if (err.requestOptions.extra['isRetryAfterRefresh'] == true) {
-      if (EnvironmentConfig.enableDebugLogging) {
-        print('⚠️  Retry after refresh failed, not attempting again');
-      }
-      return handler.next(err);
-    }
-
     // Handle 401 Unauthorized errors
     if (err.response?.statusCode == 401) {
       if (EnvironmentConfig.enableDebugLogging) {
         print('🔐 Authentication error (401) - token expired or invalid');
         print('   URL: ${err.requestOptions.uri}');
       }
+
+      // Prevent multiple simultaneous refresh attempts
+      if (_isRefreshing) {
+        // Queue this request to be retried after refresh completes
+        if (EnvironmentConfig.enableDebugLogging) {
+          print('⏳ Token refresh already in progress, queuing request...');
+        }
+
+        // Wait for refresh to complete
+        await Future.delayed(const Duration(milliseconds: 100));
+
+        // Retry the request with new token
+        try {
+          final token = _authRepository.getCachedToken();
+          if (token != null && token.isNotEmpty) {
+            err.requestOptions.headers['Authorization'] = 'Bearer $token';
+            final response = await _dio.fetch(err.requestOptions);
+            return handler.resolve(response);
+          }
+        } catch (e) {
+          if (EnvironmentConfig.enableDebugLogging) {
+            print('❌ Queued request retry failed: $e');
+          }
+        }
+
+        return handler.next(err);
+      }
+
+      // Start token refresh
+      _isRefreshing = true;
 
       try {
         // Attempt to refresh token
@@ -284,29 +303,22 @@ class _AuthInterceptor extends Interceptor {
           }
 
           // Get new token
-          final token = await _authRepository.getAccessToken();
+          final token = _authRepository.getCachedToken();
 
           if (token != null && token.isNotEmpty) {
-            // Clone the request options
-            final options = err.requestOptions;
+            // Update the failed request with new token
+            err.requestOptions.headers['Authorization'] = 'Bearer $token';
 
-            // Update with new token
-            options.headers['Authorization'] = 'Bearer $token';
-
-            // Mark as retry to prevent loops
-            options.extra['isRetryAfterRefresh'] = true;
-
-            // ✅ FIXED: Use handler.resolve with the cloned request
-            // This will go through the interceptor chain again
+            // Retry the original request
             try {
-              // Re-send the request through the same Dio instance
-              final response = await Dio().fetch(options);
+              final response = await _dio.fetch(err.requestOptions);
+              _isRefreshing = false;
               return handler.resolve(response);
             } catch (e) {
               if (EnvironmentConfig.enableDebugLogging) {
                 print('❌ Retry after refresh failed: $e');
               }
-              // Let it fall through to logout
+              _isRefreshing = false;
             }
           }
         }
@@ -316,6 +328,7 @@ class _AuthInterceptor extends Interceptor {
         }
 
         // Token refresh failed, logout user
+        _isRefreshing = false;
         await _authRepository.logout();
       } catch (e) {
         if (EnvironmentConfig.enableDebugLogging) {
@@ -323,6 +336,7 @@ class _AuthInterceptor extends Interceptor {
         }
 
         // If refresh fails, logout user
+        _isRefreshing = false;
         await _authRepository.logout();
       }
     }

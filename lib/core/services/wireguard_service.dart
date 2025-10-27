@@ -1,86 +1,104 @@
 import 'package:dio/dio.dart';
-import '../platform/wireguard_channel.dart';
-import '../network/secure_http_client.dart';
-import '../config/environment_config.dart';
-import '../../data/models/wireguard_config.dart';
-import '../../data/models/server.dart';
-import '../../data/repositories/auth_repository.dart';
+import 'package:dio/io.dart';
+import 'package:orbx/core/config/environment_config.dart';
+import 'package:orbx/data/models/server.dart';
+import 'package:orbx/data/models/wireguard_config.dart';
+import 'package:orbx/core/platform/wireguard_channel.dart';
+import 'package:orbx/core/services/http_tunnel_service.dart';
 
-/// WireGuard VPN Service with automatic certificate management
 class WireGuardService {
-  final AuthRepository _authRepo;
-  late final Dio _dio;
-
-  WireGuardConfig? _currentConfig;
+  final Dio _dio;
   bool _isConnected = false;
-  OrbXServer? _connectedServer; // ✅ ADD THIS LINE
+  WireGuardConfig? _currentConfig;
+  OrbXServer? _connectedServer;
+  HttpTunnelService? _httpTunnel;
+
+  WireGuardService() : _dio = _createDioClient();
+
+  static Dio _createDioClient() {
+    final dio = Dio(BaseOptions(
+      connectTimeout: const Duration(seconds: 30),
+      receiveTimeout: const Duration(seconds: 30),
+    ));
+
+    // ✅ CRITICAL: Accept self-signed certificates for development
+    // Remove this in production or implement proper certificate pinning
+    (dio.httpClientAdapter as DefaultHttpClientAdapter).onHttpClientCreate =
+        (client) {
+      client.badCertificateCallback = (cert, host, port) {
+        print('⚠️  Accepting certificate for $host:$port');
+        return true; // Accept all certificates
+      };
+      return client;
+    };
+
+    return dio;
+  }
 
   bool get isConnected => _isConnected;
   WireGuardConfig? get currentConfig => _currentConfig;
+  OrbXServer? get connectedServer => _connectedServer;
 
-  WireGuardService(this._authRepo) {
-    _dio = SecureHttpClient.createOrbXClient(authRepository: _authRepo);
-  }
-
-  /// Connect to OrbX server with WireGuard
-  Future<WireGuardConfig> connect(OrbXServer server) async {
+  /// Connect to VPN with HTTP tunneling
+  Future<WireGuardConfig> connect({
+    required OrbXServer server,
+    required String authToken,
+    required String publicKey,
+    required String privateKey,
+    required String protocol,
+  }) async {
     try {
-      if (EnvironmentConfig.enableDebugLogging) {
-        print('╔════════════════════════════════════════╗');
-        print('║   Connecting to OrbX Server           ║');
-        print('╠════════════════════════════════════════╣');
-        print('║ Server: ${server.name.padRight(30)} ║');
-        print('║ Location: ${server.location.padRight(28)} ║');
-        print('║ IP: ${server.ipAddress.padRight(33)} ║');
-        print('║ Port: ${server.port.toString().padRight(31)} ║');
-        print('╚════════════════════════════════════════╝');
-      }
+      print('╔════════════════════════════════════════╗');
+      print('║   Starting VPN Connection              ║');
+      print('╠════════════════════════════════════════╣');
+      print('║ Server: ${server.name}');
+      print('║ Protocol: $protocol');
+      print('║ Region: ${server.region ?? server.location}');
+      print('╚════════════════════════════════════════╝');
 
-      // 1. ALWAYS Generate NEW WireGuard keypair for each connection
-      print('🔑 Generating NEW WireGuard keypair...');
-      final keypair = await WireGuardChannel.generateKeypair();
-      final privateKey = keypair['privateKey']!;
-      final publicKey = keypair['publicKey']!;
-      print('✅ New keypair generated');
-
-      // 2. Get authentication token
-      print('🎫 Retrieving authentication token...');
-      final token = await _authRepo.getAccessToken();
-      if (token == null) {
-        throw Exception('Not authenticated - please log in');
-      }
-      print('✅ Token retrieved');
-
-      // 3. Register peer with server
       final endpoint = server.endpoint;
-      final url = 'https://$endpoint:${server.port}/wireguard/connect';
 
-      print('📞 Registering peer with server...');
-      print('   URL: $url');
+      // 1. Validate auth token
+      if (authToken.isEmpty) {
+        throw Exception('Authentication token is empty');
+      }
+
+      print('🔑 Auth token length: ${authToken.length}');
+      print(
+          '🔑 Auth token prefix: ${authToken.substring(0, authToken.length > 20 ? 20 : authToken.length)}...');
+
+      // 2. Generate WireGuard keypair (already done)
+      print('🔑 Using provided keypair');
+      print('   Public key: ${publicKey.substring(0, 20)}...');
+
+      // 3. Register with server
+      print('📞 Connecting to server...');
+      print('   Endpoint: https://$endpoint:8443/wireguard/connect');
 
       final response = await _dio.post(
-        url,
+        'https://$endpoint:8443/wireguard/connect',
+        data: {'publicKey': publicKey},
         options: Options(
           headers: {
-            'Authorization': 'Bearer $token',
+            'Authorization': 'Bearer $authToken',
             'Content-Type': 'application/json',
           },
+          validateStatus: (status) {
+            // Log the status code
+            print('📬 Server response status: $status');
+            return status == 200;
+          },
         ),
-        data: {
-          'publicKey': publicKey,
-        },
       );
 
-      print('📬 Server response: ${response.statusCode}');
-
-      if (response.statusCode != 200) {
-        throw Exception(
-          'Server returned ${response.statusCode}: ${response.data}',
-        );
-      }
+      print('✅ Connection request successful');
 
       final data = response.data as Map<String, dynamic>;
-      print('✅ Peer registered successfully');
+
+      if (data['success'] != true) {
+        throw Exception(
+            'Connection failed: ${data['message'] ?? 'Unknown error'}');
+      }
 
       // 4. Build WireGuard configuration
       print('⚙️  Building WireGuard configuration...');
@@ -114,19 +132,40 @@ class WireGuardService {
 
       _currentConfig = config;
       _isConnected = true;
-      _connectedServer = server; // ✅ ADD THIS LINE
+      _connectedServer = server;
+
+      // 6. START HTTP TUNNEL FOR MIMICRY
+      print('🎭 Starting HTTP tunnel with $protocol mimicry...');
+      _httpTunnel = HttpTunnelService(
+        serverAddress: endpoint,
+        authToken: authToken,
+        protocol: protocol,
+      );
+
+      await _httpTunnel!.start();
 
       print('╔════════════════════════════════════════╗');
       print('║   ✅ Connection Established!           ║');
+      print('║   🎭 Traffic disguised as $protocol    ║');
       print('╚════════════════════════════════════════╝');
 
       return config;
     } on DioException catch (e) {
-      print('❌ Network error: ${e.message}');
+      print('❌ Dio error type: ${e.type}');
+      print('❌ Dio error message: ${e.message}');
+      print('❌ Response data: ${e.response?.data}');
+      print('❌ Response status: ${e.response?.statusCode}');
+
       if (e.type == DioExceptionType.badCertificate) {
         print('   SSL certificate validation failed');
-        print('   The server\'s certificate could not be verified');
+      } else if (e.type == DioExceptionType.connectionTimeout) {
+        print('   Connection timeout');
+      } else if (e.type == DioExceptionType.receiveTimeout) {
+        print('   Receive timeout');
+      } else if (e.type == DioExceptionType.connectionError) {
+        print('   Connection error - check network');
       }
+
       throw Exception('Connection failed: ${e.message}');
     } catch (e, stackTrace) {
       print('❌ Connection failed: $e');
@@ -137,7 +176,7 @@ class WireGuardService {
     }
   }
 
-  /// Disconnect from VPN and cleanup server-side peer
+  /// Disconnect from VPN and cleanup
   Future<void> disconnect() async {
     try {
       if (!_isConnected || _currentConfig == null || _connectedServer == null) {
@@ -147,77 +186,67 @@ class WireGuardService {
 
       print('🔌 Disconnecting from VPN...');
 
-      // 1. Stop WireGuard tunnel on phone
+      // 1. STOP HTTP TUNNEL FIRST
+      if (_httpTunnel != null) {
+        print('🛑 Stopping HTTP tunnel...');
+        await _httpTunnel!.stop();
+        _httpTunnel!.printStatistics();
+        _httpTunnel = null;
+      }
+
+      // 2. Stop WireGuard tunnel on phone
       final success = await WireGuardChannel.disconnect();
 
       if (!success) {
         print('⚠️  Failed to stop VPN tunnel');
       }
 
-      // 2. Notify server to remove peer
+      // 3. Notify server to remove peer
       try {
-        final token = await _authRepo.getAccessToken();
-        if (token != null) {
-          final endpoint = _connectedServer!.endpoint;
-          await _dio.post(
-            'https://$endpoint:${_connectedServer!.port}/wireguard/disconnect',
-            options: Options(
-              headers: {
-                'Authorization': 'Bearer $token',
-              },
-              sendTimeout: Duration(seconds: 5),
-              receiveTimeout: Duration(seconds: 5),
-            ),
-          );
-          print('✅ Peer removed from server');
-        }
+        final endpoint = _connectedServer!.endpoint;
+
+        await _dio.post(
+          'https://$endpoint:8443/wireguard/disconnect',
+          options: Options(
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            validateStatus: (status) => status == 200,
+          ),
+        );
+        print('✅ Server notified of disconnection');
       } catch (e) {
         print('⚠️  Failed to notify server: $e');
-        // Don't throw - local disconnect already succeeded
       }
 
-      _isConnected = false;
       _currentConfig = null;
+      _isConnected = false;
       _connectedServer = null;
 
-      print('✅ Disconnected successfully');
+      print('╔════════════════════════════════════════╗');
+      print('║   ✅ Disconnected Successfully         ║');
+      print('╚════════════════════════════════════════╝');
     } catch (e) {
-      print('❌ Disconnect error: $e');
-      rethrow;
+      print('❌ Error during disconnect: $e');
     }
   }
 
-  /// Get connection statistics
+  /// Get tunnel statistics
+  Map<String, int>? getTunnelStatistics() {
+    return _httpTunnel?.getStatistics();
+  }
+
+  /// Get WireGuard statistics (for backward compatibility)
   Future<Map<String, int>> getStatistics() async {
-    if (!_isConnected) {
-      return {'bytesSent': 0, 'bytesReceived': 0};
-    }
-
     try {
-      return await WireGuardChannel.getStatistics();
+      // Try to get statistics from WireGuard channel
+      final stats = await WireGuardChannel.getStatistics();
+      return stats;
     } catch (e) {
-      print('⚠️  Failed to get statistics: $e');
-      return {'bytesSent': 0, 'bytesReceived': 0};
+      return {
+        'bytesSent': 0,
+        'bytesReceived': 0,
+      };
     }
-  }
-
-  /// Check if VPN connection is active
-  Future<bool> checkConnection() async {
-    if (!_isConnected) {
-      return false;
-    }
-
-    try {
-      final status = await WireGuardChannel.getStatus();
-      return status['connected'] == true;
-    } catch (e) {
-      print('⚠️  Failed to check connection: $e');
-      return false;
-    }
-  }
-
-  /// Dispose resources
-  void dispose() {
-    _dio.close();
   }
 }

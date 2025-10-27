@@ -1,7 +1,10 @@
+// lib/presentation/screens/server_list/server_list_screen.dart
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/server_provider.dart';
 import '../../providers/connection_provider.dart';
+import '../../providers/auth_provider.dart'; // ✅ This import is correct
 import '../../../data/models/server.dart';
 import 'widgets/server_card.dart';
 
@@ -189,6 +192,7 @@ class _ServerListScreenState extends State<ServerListScreen> {
 
   void _selectServer(OrbXServer server) {
     final connectionProvider = context.read<ConnectionProvider>();
+    final authProvider = context.read<AuthProvider>();
 
     // Show confirmation dialog
     showDialog(
@@ -214,8 +218,27 @@ class _ServerListScreenState extends State<ServerListScreen> {
               Navigator.pop(context); // Close dialog
               Navigator.pop(context); // Close server list
 
-              // Connect to selected server
-              await connectionProvider.connect(server: server);
+              // Get auth token from AuthProvider
+              final authToken = authProvider.authToken;
+
+              if (authToken == null || authToken.isEmpty) {
+                // Show error if not authenticated
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Authentication required'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+                return;
+              }
+
+              // Connect with auth token
+              await connectionProvider.connect(
+                server: server,
+                authToken: authToken,
+              );
             },
             child: const Text('Connect'),
           ),
