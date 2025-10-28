@@ -15,6 +15,7 @@ import com.wireguard.android.backend.GoBackend
 import com.wireguard.android.backend.Tunnel
 import com.wireguard.config.Config
 import kotlinx.coroutines.*
+import java.io.BufferedReader
 import java.io.StringReader
 
 /**
@@ -139,7 +140,9 @@ class OrbVpnService : VpnService() {
                 Log.d(TAG, "📝 WireGuard config built:")
                 Log.d(TAG, configText)
                 
-                val parsedConfig = Config.parse(StringReader(configText))
+                // ✅ FIX: Config.parse() requires BufferedReader, not StringReader
+                // We wrap StringReader in BufferedReader
+                val parsedConfig = Config.parse(BufferedReader(StringReader(configText)))
                 
                 // Create TUN interface using Builder
                 tunInterface = createTunInterface(config)
