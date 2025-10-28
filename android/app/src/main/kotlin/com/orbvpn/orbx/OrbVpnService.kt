@@ -83,9 +83,9 @@ class OrbVpnService : VpnService() {
                     startForeground(NOTIFICATION_ID, createNotification("Connecting..."))
                     connectVpn(configMap)
                 } else {
-                    Log.e(TAG, "❌ Config map is null")
-                    broadcastError("Configuration is missing")
-                    stopSelf()
+                    Log.w(TAG, "⚠️ Config map is null, ignoring duplicate connect call")
+                    // Don't stop the service - it's already running with previous config
+                    // Just ignore this duplicate call
                 }
             }
             ACTION_DISCONNECT -> {
@@ -204,263 +204,292 @@ private fun connectVpn(config: HashMap<String, Any>) {
 }
     
 private fun startHttpTunnel(protocol: String, serverEndpoint: String, authToken: String) {
+    Log.d(TAG, "🟢 HTTP TUNNEL FUNCTION CALLED")
+    
     httpTunnelJob?.cancel()
     httpTunnelJob = serviceScope.launch {
+        Log.d(TAG, "🟢 HTTP TUNNEL COROUTINE STARTED")
+        
         try {
             Log.d(TAG, "🔵 Starting HTTP tunnel")
             Log.d(TAG, "   Protocol: $protocol")
             Log.d(TAG, "   Server: $serverEndpoint")
             
-            // Extract hostname and USE PORT 8443 for HTTPS mimicry
-            val host = serverEndpoint.split(":")[0]
-            val port = 8443  // ALWAYS use 8443 for HTTP tunnel
+            // Parse server endpoint
+            val parts = serverEndpoint.split(":")
+            if (parts.size != 2) {
+                Log.e(TAG, "❌ Invalid server endpoint: $serverEndpoint")
+                return@launch
+            }
             
-            Log.d(TAG, "🔵 Connecting to $host:$port via TLS")
+            val host = parts[0]
+            val wgPort = parts[1].toIntOrNull() ?: run {
+                Log.e(TAG, "❌ Invalid port: ${parts[1]}")
+                return@launch
+            }
             
-            // Use SSLSocket for HTTPS connections
-            val sslContext = SSLContext.getInstance("TLS")
+            // Connect to HTTPS port (8443) for tunnel establishment
+            val tunnelPort = 8443
+            Log.d(TAG, "🔵 Connecting to $host:$tunnelPort via TLS")
             
-            // DEVELOPMENT ONLY: Trust all certificates
-            val trustAllCerts = arrayOf<TrustManager>(object : X509TrustManager {
-                override fun checkClientTrusted(chain: Array<X509Certificate>, authType: String) {}
-                override fun checkServerTrusted(chain: Array<X509Certificate>, authType: String) {}
-                override fun getAcceptedIssuers(): Array<X509Certificate> = arrayOf()
-            })
+            // Create TLS socket with disabled certificate validation (DEVELOPMENT ONLY!)
+            Log.d(TAG, "🟢 CREATING CUSTOM SSL CONTEXT")
             
+            // Create trust manager that accepts all certificates
+            val trustAllCerts = arrayOf<javax.net.ssl.TrustManager>(
+                object : javax.net.ssl.X509TrustManager {
+                    override fun checkClientTrusted(chain: Array<java.security.cert.X509Certificate>, authType: String) {}
+                    override fun checkServerTrusted(chain: Array<java.security.cert.X509Certificate>, authType: String) {}
+                    override fun getAcceptedIssuers(): Array<java.security.cert.X509Certificate> = arrayOf()
+                }
+            )
+            
+            // Create SSL context
+            val sslContext = javax.net.ssl.SSLContext.getInstance("TLS")
             sslContext.init(null, trustAllCerts, java.security.SecureRandom())
-            val sslSocketFactory = sslContext.socketFactory
             
-            // Create SSL socket
-            val sslSocket = sslSocketFactory.createSocket(host, port) as SSLSocket
+            // Create socket factory
+            val socketFactory = sslContext.socketFactory
+            
+            Log.d(TAG, "🟢 CREATING SSL SOCKET")
+            val sslSocket = socketFactory.createSocket(host, tunnelPort) as javax.net.ssl.SSLSocket
+            
+            Log.d(TAG, "🟢 SSL SOCKET CREATED WITH CERT VALIDATION DISABLED")
+            Log.w(TAG, "⚠️ WARNING: Certificate validation is disabled! This is for development only!")
+            
             httpTunnelSocket = sslSocket
             
-            // Start TLS handshake
-            sslSocket.startHandshake()
-            Log.d(TAG, "✅ TLS handshake successful")
-
-            // Build and send HTTP request based on protocol
-            val request = when (protocol.lowercase()) {
-                "http", "https" -> buildHttpRequest(host, authToken)
-                "teams" -> buildTeamsRequest(host, authToken)
-                "google" -> buildGoogleRequest(host, authToken)
-                "shaparak" -> buildShaparakRequest(host, authToken)
-                "doh" -> buildDohRequest(host, authToken)
-                "zoom" -> buildZoomRequest(host, authToken)
-                "facetime" -> buildFacetimeRequest(host, authToken)
-                "vk" -> buildVkRequest(host, authToken)
-                "yandex" -> buildYandexRequest(host, authToken)
-                "wechat" -> buildWechatRequest(host, authToken)
-                else -> buildHttpRequest(host, authToken)
-            }
-
-            Log.d(TAG, "🔵 Sending $protocol mimicry request")
-            val writer = OutputStreamWriter(sslSocket.outputStream, Charsets.UTF_8)
-            writer.write(request)
-            writer.flush()
-
-            // ✅ READ THE SERVER'S RESPONSE
-            Log.d(TAG, "🔵 Waiting for server response...")
-            val reader = BufferedReader(InputStreamReader(sslSocket.inputStream, Charsets.UTF_8))
-            val response = StringBuilder()
-            var line: String?
-
-            // Read HTTP response headers until empty line
-            var headerCount = 0
-            while (reader.readLine().also { line = it } != null && headerCount < 50) {
-                headerCount++
-                response.append(line).append("\n")
-                Log.d(TAG, "   Response line: $line")
-                if (line?.isEmpty() == true) {
-                    // Empty line indicates end of headers
-                    break
-                }
-            }
-
-            val responseStr = response.toString()
-            Log.d(TAG, "✅ HTTP tunnel established successfully")
-            Log.d(TAG, "   Protocol: $protocol")
-            Log.d(TAG, "   Response: ${responseStr.take(200)}")
-
-            // Check if response was successful
-            if (!responseStr.contains("200 OK") && !responseStr.contains("101 Switching Protocols")) {
-                throw IOException("HTTP tunnel failed: $responseStr")
-            }
-
-            // Keep the socket open for the tunnel
-            Log.d(TAG, "🔵 HTTP tunnel is now open, keeping connection alive...")
+            // Get selected VPN type (for future VLESS support)
+            val vpnType = "wireguard"
             
-            // Keep the coroutine alive to maintain the tunnel
-            delay(Long.MAX_VALUE)
+            Log.d(TAG, "🟢 BUILDING REQUEST FOR PROTOCOL: $protocol")
+            
+            // Build HTTP POST request for tunnel establishment
+            val request = when (protocol.lowercase()) {
+                "https", "http" -> buildHttpRequest(host, authToken, vpnType)
+                "teams" -> buildTeamsRequest(host, authToken, vpnType)
+                "google" -> buildGoogleRequest(host, authToken, vpnType)
+                "shaparak" -> buildShaparakRequest(host, authToken, vpnType)
+                "doh" -> buildDohRequest(host, authToken, vpnType)
+                "zoom" -> buildZoomRequest(host, authToken, vpnType)
+                "facetime" -> buildFacetimeRequest(host, authToken, vpnType)
+                "vk" -> buildVkRequest(host, authToken, vpnType)
+                "yandex" -> buildYandexRequest(host, authToken, vpnType)
+                "wechat" -> buildWechatRequest(host, authToken, vpnType)
+                else -> buildHttpRequest(host, authToken, vpnType)
+            }
+            
+            Log.d(TAG, "🔵 Sending $protocol mimicry request")
+            Log.d(TAG, "   Request preview: ${request.take(100)}...")
+            
+            Log.d(TAG, "🟢 GETTING OUTPUT STREAM")
+            val writer = OutputStreamWriter(sslSocket.getOutputStream())
+            
+            Log.d(TAG, "🟢 WRITING REQUEST")
+            writer.write(request)
+            
+            Log.d(TAG, "🟢 FLUSHING REQUEST")
+            writer.flush()
+            
+            Log.d(TAG, "🟢 REQUEST SENT, READING RESPONSE")
+            
+            // Read response headers
+            Log.d(TAG, "🔵 Waiting for server response...")
+            val reader = BufferedReader(InputStreamReader(sslSocket.getInputStream()))
+            
+            Log.d(TAG, "🟢 READING STATUS LINE")
+            
+            // Read status line
+            val statusLine = reader.readLine()
+            Log.d(TAG, "   Response line: $statusLine")
+            
+            if (statusLine == null || !statusLine.contains("200")) {
+                Log.e(TAG, "❌ Server rejected tunnel: $statusLine")
+                sslSocket.close()
+                return@launch
+            }
+            
+            Log.d(TAG, "🟢 STATUS LINE OK, READING HEADERS")
+            
+            // Read headers until empty line
+            var line: String?
+            while (reader.readLine().also { line = it } != null) {
+                Log.d(TAG, "   Response line: $line")
+                if (line?.isEmpty() == true) break
+            }
+            
+            Log.d(TAG, "✅ HTTP tunnel established successfully")
+            Log.d(TAG, "🔵 HTTP tunnel is now open, forwarding WireGuard packets...")
+            
+            // Connection is now hijacked by server - it will forward WireGuard packets
+            // The socket stays open and handles bidirectional packet forwarding
             
         } catch (e: Exception) {
-            Log.e(TAG, "❌ HTTP tunnel failed", e)
+            Log.e(TAG, "❌ Error establishing HTTP tunnel", e)
+            Log.e(TAG, "❌ Exception details: ${e.message}")
+            Log.e(TAG, "❌ Exception type: ${e.javaClass.name}")
             httpTunnelSocket?.close()
             httpTunnelSocket = null
-            // Don't throw - let WireGuard try direct connection as fallback
         }
     }
 }
 
-// ═══════════════════════════════════════════════════════════════
-// Protocol Mimicry Request Builders
-// ═══════════════════════════════════════════════════════════════
+// Get user's selected VPN type from preferences or config
+private fun getSelectedVpnType(): String {
+    // In the future, this could read from user settings
+    // For now, default to WireGuard
+    return "wireguard"
+    
+    // Later when VLESS is added:
+    // return sharedPreferences.getString("vpn_type", "wireguard") ?: "wireguard"
+}
 
 // ✅ HTTP/HTTPS - Generic web traffic
-private fun buildHttpRequest(host: String, authToken: String): String {
-    return """
-        POST / HTTP/1.1
-        Host: $host
-        Authorization: Bearer $authToken
-        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36
-        Content-Type: application/octet-stream
-        Accept: */*
-        Accept-Encoding: gzip, deflate, br
-        Connection: keep-alive
-        
-        
-    """.trimIndent()
+private fun buildHttpRequest(host: String, authToken: String, vpnType: String = "wireguard"): String {
+    return "POST /vpn/tunnel?type=$vpnType&protocol=https HTTP/1.1\r\n" +
+           "Host: $host\r\n" +
+           "Authorization: Bearer $authToken\r\n" +
+           "X-VPN-Type: $vpnType\r\n" +
+           "X-Protocol: https\r\n" +
+           "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36\r\n" +
+           "Content-Type: application/octet-stream\r\n" +
+           "Accept: */*\r\n" +
+           "Accept-Encoding: gzip, deflate, br\r\n" +
+           "Connection: keep-alive\r\n" +
+           "\r\n"
 }
 
 // ✅ Microsoft Teams - Video conferencing
-private fun buildTeamsRequest(host: String, authToken: String): String {
-    return """
-        POST /teams/messages HTTP/1.1
-        Host: $host
-        Authorization: Bearer $authToken
-        User-Agent: Mozilla/5.0 Teams/1.5.00.32283
-        X-Ms-Client-Version: 1.0.0.2024010901
-        X-Ms-Client-Type: desktop
-        Content-Type: application/json
-        Accept: application/json
-        Connection: keep-alive
-        
-        
-    """.trimIndent()
+private fun buildTeamsRequest(host: String, authToken: String, vpnType: String = "wireguard"): String {
+    return "POST /vpn/tunnel?type=$vpnType&protocol=teams HTTP/1.1\r\n" +
+           "Host: $host\r\n" +
+           "Authorization: Bearer $authToken\r\n" +
+           "X-VPN-Type: $vpnType\r\n" +
+           "X-Protocol: teams\r\n" +
+           "User-Agent: Mozilla/5.0 Teams/1.5.00.32283\r\n" +
+           "X-Ms-Client-Version: 1.0.0.2024010901\r\n" +
+           "X-Ms-Client-Type: desktop\r\n" +
+           "Content-Type: application/json\r\n" +
+           "Accept: application/json\r\n" +
+           "Connection: keep-alive\r\n" +
+           "\r\n"
 }
 
 // ✅ Google Workspace - Drive, Meet, Calendar
-private fun buildGoogleRequest(host: String, authToken: String): String {
-    return """
-        POST /google/ HTTP/1.1
-        Host: $host
-        Authorization: Bearer $authToken
-        User-Agent: Mozilla/5.0 Chrome/120.0.0.0
-        X-Goog-Api-Client: gl-java/1.0
-        X-Goog-AuthUser: 0
-        Content-Type: application/json
-        Accept: application/json
-        Connection: keep-alive
-        
-        
-    """.trimIndent()
+private fun buildGoogleRequest(host: String, authToken: String, vpnType: String = "wireguard"): String {
+    return "POST /vpn/tunnel?type=$vpnType&protocol=google HTTP/1.1\r\n" +
+           "Host: $host\r\n" +
+           "Authorization: Bearer $authToken\r\n" +
+           "X-VPN-Type: $vpnType\r\n" +
+           "X-Protocol: google\r\n" +
+           "User-Agent: Mozilla/5.0 Chrome/120.0.0.0\r\n" +
+           "X-Goog-Api-Client: gl-java/1.0\r\n" +
+           "X-Goog-AuthUser: 0\r\n" +
+           "Content-Type: application/json\r\n" +
+           "Accept: application/json\r\n" +
+           "Connection: keep-alive\r\n" +
+           "\r\n"
 }
 
 // ✅ Shaparak - Iranian banking system
-private fun buildShaparakRequest(host: String, authToken: String): String {
-    return """
-        POST /shaparak/transaction HTTP/1.1
-        Host: $host
-        Authorization: Bearer $authToken
-        User-Agent: ShaparakClient/2.0
-        Content-Type: text/xml; charset=utf-8
-        SOAPAction: "http://shaparak.ir/VerifyTransaction"
-        Accept: text/xml
-        Connection: keep-alive
-        
-        
-    """.trimIndent()
+private fun buildShaparakRequest(host: String, authToken: String, vpnType: String = "wireguard"): String {
+    return "POST /vpn/tunnel?type=$vpnType&protocol=shaparak HTTP/1.1\r\n" +
+           "Host: $host\r\n" +
+           "Authorization: Bearer $authToken\r\n" +
+           "X-VPN-Type: $vpnType\r\n" +
+           "X-Protocol: shaparak\r\n" +
+           "User-Agent: ShaparakClient/2.0\r\n" +
+           "Content-Type: text/xml; charset=utf-8\r\n" +
+           "SOAPAction: \"http://shaparak.ir/VerifyTransaction\"\r\n" +
+           "Accept: text/xml\r\n" +
+           "Connection: keep-alive\r\n" +
+           "\r\n"
 }
 
 // ✅ DNS over HTTPS
-private fun buildDohRequest(host: String, authToken: String): String {
-    return """
-        POST /dns-query HTTP/1.1
-        Host: $host
-        Authorization: Bearer $authToken
-        User-Agent: Mozilla/5.0
-        Content-Type: application/dns-message
-        Accept: application/dns-message
-        Connection: keep-alive
-        
-        
-    """.trimIndent()
+private fun buildDohRequest(host: String, authToken: String, vpnType: String = "wireguard"): String {
+    return "POST /vpn/tunnel?type=$vpnType&protocol=doh HTTP/1.1\r\n" +
+           "Host: $host\r\n" +
+           "Authorization: Bearer $authToken\r\n" +
+           "X-VPN-Type: $vpnType\r\n" +
+           "X-Protocol: doh\r\n" +
+           "User-Agent: Mozilla/5.0\r\n" +
+           "Content-Type: application/dns-message\r\n" +
+           "Accept: application/dns-message\r\n" +
+           "Connection: keep-alive\r\n" +
+           "\r\n"
 }
 
 // ✅ Zoom - Video conferencing
-private fun buildZoomRequest(host: String, authToken: String): String {
-    return """
-        POST /zoom/ HTTP/1.1
-        Host: $host
-        Authorization: Bearer $authToken
-        User-Agent: Mozilla/5.0 Zoom/5.16.0
-        Content-Type: application/json
-        Accept: application/json
-        Connection: keep-alive
-        
-        
-    """.trimIndent()
+private fun buildZoomRequest(host: String, authToken: String, vpnType: String = "wireguard"): String {
+    return "POST /vpn/tunnel?type=$vpnType&protocol=zoom HTTP/1.1\r\n" +
+           "Host: $host\r\n" +
+           "Authorization: Bearer $authToken\r\n" +
+           "X-VPN-Type: $vpnType\r\n" +
+           "X-Protocol: zoom\r\n" +
+           "User-Agent: Mozilla/5.0 Zoom/5.16.0\r\n" +
+           "Content-Type: application/json\r\n" +
+           "Accept: application/json\r\n" +
+           "Connection: keep-alive\r\n" +
+           "\r\n"
 }
 
 // ✅ FaceTime - Apple video calling
-private fun buildFacetimeRequest(host: String, authToken: String): String {
-    return """
-        POST /facetime/ HTTP/1.1
-        Host: $host
-        Authorization: Bearer $authToken
-        User-Agent: FaceTime/1.0 CFNetwork/1404.0.5
-        X-Apple-Client-Application: FaceTime
-        X-Apple-Client-Version: 1.0
-        Content-Type: application/json
-        Accept: application/json
-        Connection: keep-alive
-        
-        
-    """.trimIndent()
+private fun buildFacetimeRequest(host: String, authToken: String, vpnType: String = "wireguard"): String {
+    return "POST /vpn/tunnel?type=$vpnType&protocol=facetime HTTP/1.1\r\n" +
+           "Host: $host\r\n" +
+           "Authorization: Bearer $authToken\r\n" +
+           "X-VPN-Type: $vpnType\r\n" +
+           "X-Protocol: facetime\r\n" +
+           "User-Agent: FaceTime/1.0 CFNetwork/1404.0.5\r\n" +
+           "X-Apple-Client-Application: FaceTime\r\n" +
+           "X-Apple-Client-Version: 1.0\r\n" +
+           "Content-Type: application/json\r\n" +
+           "Accept: application/json\r\n" +
+           "Connection: keep-alive\r\n" +
+           "\r\n"
 }
 
 // ✅ VK - Russian social network
-private fun buildVkRequest(host: String, authToken: String): String {
-    return """
-        POST /vk/ HTTP/1.1
-        Host: $host
-        Authorization: Bearer $authToken
-        User-Agent: VKAndroidApp/7.26
-        Content-Type: application/json
-        Accept: application/json
-        Connection: keep-alive
-        
-        
-    """.trimIndent()
+private fun buildVkRequest(host: String, authToken: String, vpnType: String = "wireguard"): String {
+    return "POST /vpn/tunnel?type=$vpnType&protocol=vk HTTP/1.1\r\n" +
+           "Host: $host\r\n" +
+           "Authorization: Bearer $authToken\r\n" +
+           "X-VPN-Type: $vpnType\r\n" +
+           "X-Protocol: vk\r\n" +
+           "User-Agent: VKAndroidApp/7.26\r\n" +
+           "Content-Type: application/json\r\n" +
+           "Accept: application/json\r\n" +
+           "Connection: keep-alive\r\n" +
+           "\r\n"
 }
 
 // ✅ Yandex - Russian services
-private fun buildYandexRequest(host: String, authToken: String): String {
-    return """
-        POST /yandex/ HTTP/1.1
-        Host: $host
-        Authorization: Bearer $authToken
-        User-Agent: Mozilla/5.0 YaBrowser/23.11.0
-        Content-Type: application/json
-        Accept: application/json
-        Connection: keep-alive
-        
-        
-    """.trimIndent()
+private fun buildYandexRequest(host: String, authToken: String, vpnType: String = "wireguard"): String {
+    return "POST /vpn/tunnel?type=$vpnType&protocol=yandex HTTP/1.1\r\n" +
+           "Host: $host\r\n" +
+           "Authorization: Bearer $authToken\r\n" +
+           "X-VPN-Type: $vpnType\r\n" +
+           "X-Protocol: yandex\r\n" +
+           "User-Agent: Mozilla/5.0 YaBrowser/23.11.0\r\n" +
+           "Content-Type: application/json\r\n" +
+           "Accept: application/json\r\n" +
+           "Connection: keep-alive\r\n" +
+           "\r\n"
 }
 
 // ✅ WeChat - Chinese messaging
-private fun buildWechatRequest(host: String, authToken: String): String {
-    return """
-        POST /wechat/ HTTP/1.1
-        Host: $host
-        Authorization: Bearer $authToken
-        User-Agent: MicroMessenger/8.0.37
-        Content-Type: application/json
-        Accept: application/json
-        Connection: keep-alive
-        
-        
-    """.trimIndent()
+private fun buildWechatRequest(host: String, authToken: String, vpnType: String = "wireguard"): String {
+    return "POST /vpn/tunnel?type=$vpnType&protocol=wechat HTTP/1.1\r\n" +
+           "Host: $host\r\n" +
+           "Authorization: Bearer $authToken\r\n" +
+           "X-VPN-Type: $vpnType\r\n" +
+           "X-Protocol: wechat\r\n" +
+           "User-Agent: MicroMessenger/8.0.37\r\n" +
+           "Content-Type: application/json\r\n" +
+           "Accept: application/json\r\n" +
+           "Connection: keep-alive\r\n" +
+           "\r\n"
 }
     
     private fun buildWireGuardConfig(
