@@ -112,6 +112,8 @@ class WireGuardService {
         dns: List<String>.from(data['dns'] as List),
         mtu: data['mtu'] as int,
         serverEndpoint: '$endpoint:51820',
+        protocol: protocol,
+        authToken: authToken,
       );
 
       if (EnvironmentConfig.enableDebugLogging) {

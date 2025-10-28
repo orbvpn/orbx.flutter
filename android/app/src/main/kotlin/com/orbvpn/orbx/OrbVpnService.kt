@@ -23,6 +23,12 @@ import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.io.OutputStreamWriter
 import java.net.Socket
+import javax.net.ssl.SSLContext
+import javax.net.ssl.SSLSocket
+import javax.net.ssl.SSLHandshakeException
+import javax.net.ssl.TrustManager
+import javax.net.ssl.X509TrustManager
+import java.security.cert.X509Certificate
 
 class OrbVpnService : VpnService() {
     
@@ -195,104 +201,250 @@ private fun connectVpn(config: HashMap<String, Any>) {
     }
 }
     
-    private fun startHttpTunnel(protocol: String, serverEndpoint: String, authToken: String) {
-        httpTunnelJob?.cancel()
-        httpTunnelJob = serviceScope.launch {
-            try {
-                Log.d(TAG, "🔵 Starting HTTP tunnel")
-                Log.d(TAG, "   Protocol: $protocol")
-                Log.d(TAG, "   Server: $serverEndpoint")
-                
-                // Extract host and port from serverEndpoint
-                val parts = serverEndpoint.split(":")
-                if (parts.size != 2) {
-                    Log.e(TAG, "❌ Invalid server endpoint format: $serverEndpoint")
-                    return@launch
-                }
-                
-                val host = parts[0]
-                val port = parts[1].toIntOrNull() ?: run {
-                    Log.e(TAG, "❌ Invalid port: ${parts[1]}")
-                    return@launch
-                }
-                
-                Log.d(TAG, "🔵 Connecting to $host:$port")
-                httpTunnelSocket = Socket(host, port)
-                
-                // Send HTTP request based on protocol
-                val request = when (protocol.lowercase()) {
-                    "http" -> buildHttpRequest(host, authToken)
-                    "teams" -> buildTeamsRequest(host, authToken)
-                    "shaparak" -> buildShaparakRequest(host, authToken)
-                    else -> buildHttpRequest(host, authToken)
-                }
-                
-                Log.d(TAG, "🔵 Sending $protocol request")
-                val writer = OutputStreamWriter(httpTunnelSocket!!.getOutputStream())
-                writer.write(request)
-                writer.flush()
-                
-                // Read response
-                val reader = BufferedReader(InputStreamReader(httpTunnelSocket!!.getInputStream()))
-                val response = StringBuilder()
-                var line: String?
-                while (reader.readLine().also { line = it } != null) {
-                    response.append(line).append("\n")
-                    if (line?.isEmpty() == true) break
-                }
-                
-                Log.d(TAG, "✅ HTTP tunnel established")
-                Log.d(TAG, "   Response: ${response.toString().take(200)}")
-                
-            } catch (e: Exception) {
-                Log.e(TAG, "❌ Error starting HTTP tunnel", e)
-                httpTunnelSocket?.close()
-                httpTunnelSocket = null
+private fun startHttpTunnel(protocol: String, serverEndpoint: String, authToken: String) {
+    httpTunnelJob?.cancel()
+    httpTunnelJob = serviceScope.launch {
+        try {
+            Log.d(TAG, "🔵 Starting HTTP tunnel")
+            Log.d(TAG, "   Protocol: $protocol")
+            Log.d(TAG, "   Server: $serverEndpoint")
+            
+            // ✅ Extract hostname and USE PORT 8443 for HTTPS mimicry
+            val host = serverEndpoint.split(":")[0]
+            val port = 8443  // ✅ ALWAYS use 8443 for HTTP tunnel
+            
+            Log.d(TAG, "🔵 Connecting to $host:$port via TLS")
+            
+            // ✅ Use SSLSocket for HTTPS connections
+            val sslContext = SSLContext.getInstance("TLS")
+            
+            // ⚠️ DEVELOPMENT ONLY: Trust all certificates
+            val trustAllCerts = arrayOf<TrustManager>(object : X509TrustManager {
+                override fun checkClientTrusted(chain: Array<X509Certificate>, authType: String) {}
+                override fun checkServerTrusted(chain: Array<X509Certificate>, authType: String) {}
+                override fun getAcceptedIssuers(): Array<X509Certificate> = arrayOf()
+            })
+            
+            sslContext.init(null, trustAllCerts, java.security.SecureRandom())
+            val sslSocketFactory = sslContext.socketFactory
+            
+            // Create SSL socket
+            val sslSocket = sslSocketFactory.createSocket(host, port) as SSLSocket
+            httpTunnelSocket = sslSocket
+            
+            // Start TLS handshake
+            sslSocket.startHandshake()
+            Log.d(TAG, "✅ TLS handshake successful")
+
+            // Build and send HTTP request based on protocol
+            val request = when (protocol.lowercase()) {
+                "http", "https" -> buildHttpRequest(host, authToken)
+                "teams" -> buildTeamsRequest(host, authToken)
+                "google" -> buildGoogleRequest(host, authToken)
+                "shaparak" -> buildShaparakRequest(host, authToken)
+                "doh" -> buildDohRequest(host, authToken)
+                "zoom" -> buildZoomRequest(host, authToken)
+                "facetime" -> buildFacetimeRequest(host, authToken)
+                "vk" -> buildVkRequest(host, authToken)
+                "yandex" -> buildYandexRequest(host, authToken)
+                "wechat" -> buildWechatRequest(host, authToken)
+                else -> buildHttpRequest(host, authToken)
             }
+
+            Log.d(TAG, "🔵 Sending $protocol mimicry request")
+            val writer = OutputStreamWriter(sslSocket.outputStream, Charsets.UTF_8)
+            writer.write(request)
+            writer.flush()
+
+            // ✅ READ THE SERVER'S RESPONSE
+            Log.d(TAG, "🔵 Waiting for server response...")
+            val reader = BufferedReader(InputStreamReader(sslSocket.inputStream, Charsets.UTF_8))
+            val response = StringBuilder()
+            var line: String?
+
+            // Read HTTP response headers until empty line
+            while (reader.readLine().also { line = it } != null) {
+                response.append(line).append("\n")
+                if (line?.isEmpty() == true) break
+            }
+
+            Log.d(TAG, "✅ HTTP tunnel established successfully")
+            Log.d(TAG, "   Protocol: $protocol")
+            Log.d(TAG, "   Response: ${response.toString().take(200)}")
+            
+        } catch (e: SSLHandshakeException) {
+            Log.e(TAG, "❌ SSL handshake failed", e)
+            httpTunnelSocket?.close()
+            httpTunnelSocket = null
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Error starting HTTP tunnel", e)
+            httpTunnelSocket?.close()
+            httpTunnelSocket = null
         }
     }
-    
-    private fun buildHttpRequest(host: String, authToken: String): String {
-        return buildString {
-            append("GET / HTTP/1.1\r\n")
-            append("Host: $host\r\n")
-            append("User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36\r\n")
-            append("Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8\r\n")
-            if (authToken.isNotEmpty()) {
-                append("Authorization: Bearer $authToken\r\n")
-            }
-            append("Connection: keep-alive\r\n")
-            append("\r\n")
-        }
-    }
-    
-    private fun buildTeamsRequest(host: String, authToken: String): String {
-        return buildString {
-            append("GET /api/teams HTTP/1.1\r\n")
-            append("Host: $host\r\n")
-            append("User-Agent: Microsoft Teams/1.5.00.1234\r\n")
-            append("X-Teams-Client: desktop\r\n")
-            if (authToken.isNotEmpty()) {
-                append("Authorization: Bearer $authToken\r\n")
-            }
-            append("Connection: keep-alive\r\n")
-            append("\r\n")
-        }
-    }
-    
-    private fun buildShaparakRequest(host: String, authToken: String): String {
-        return buildString {
-            append("POST /shaparak/payment HTTP/1.1\r\n")
-            append("Host: $host\r\n")
-            append("User-Agent: Shaparak-Client/2.0\r\n")
-            append("Content-Type: application/json\r\n")
-            if (authToken.isNotEmpty()) {
-                append("X-Shaparak-Token: $authToken\r\n")
-            }
-            append("Connection: keep-alive\r\n")
-            append("\r\n")
-        }
-    }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Protocol Mimicry Request Builders
+// ═══════════════════════════════════════════════════════════════
+
+// ✅ HTTP/HTTPS - Generic web traffic
+private fun buildHttpRequest(host: String, authToken: String): String {
+    return """
+        POST / HTTP/1.1
+        Host: $host
+        Authorization: Bearer $authToken
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36
+        Content-Type: application/octet-stream
+        Accept: */*
+        Accept-Encoding: gzip, deflate, br
+        Connection: keep-alive
+        
+        
+    """.trimIndent()
+}
+
+// ✅ Microsoft Teams - Video conferencing
+private fun buildTeamsRequest(host: String, authToken: String): String {
+    return """
+        POST /teams/messages HTTP/1.1
+        Host: $host
+        Authorization: Bearer $authToken
+        User-Agent: Mozilla/5.0 Teams/1.5.00.32283
+        X-Ms-Client-Version: 1.0.0.2024010901
+        X-Ms-Client-Type: desktop
+        Content-Type: application/json
+        Accept: application/json
+        Connection: keep-alive
+        
+        
+    """.trimIndent()
+}
+
+// ✅ Google Workspace - Drive, Meet, Calendar
+private fun buildGoogleRequest(host: String, authToken: String): String {
+    return """
+        POST /google/ HTTP/1.1
+        Host: $host
+        Authorization: Bearer $authToken
+        User-Agent: Mozilla/5.0 Chrome/120.0.0.0
+        X-Goog-Api-Client: gl-java/1.0
+        X-Goog-AuthUser: 0
+        Content-Type: application/json
+        Accept: application/json
+        Connection: keep-alive
+        
+        
+    """.trimIndent()
+}
+
+// ✅ Shaparak - Iranian banking system
+private fun buildShaparakRequest(host: String, authToken: String): String {
+    return """
+        POST /shaparak/transaction HTTP/1.1
+        Host: $host
+        Authorization: Bearer $authToken
+        User-Agent: ShaparakClient/2.0
+        Content-Type: text/xml; charset=utf-8
+        SOAPAction: "http://shaparak.ir/VerifyTransaction"
+        Accept: text/xml
+        Connection: keep-alive
+        
+        
+    """.trimIndent()
+}
+
+// ✅ DNS over HTTPS
+private fun buildDohRequest(host: String, authToken: String): String {
+    return """
+        POST /dns-query HTTP/1.1
+        Host: $host
+        Authorization: Bearer $authToken
+        User-Agent: Mozilla/5.0
+        Content-Type: application/dns-message
+        Accept: application/dns-message
+        Connection: keep-alive
+        
+        
+    """.trimIndent()
+}
+
+// ✅ Zoom - Video conferencing
+private fun buildZoomRequest(host: String, authToken: String): String {
+    return """
+        POST /zoom/ HTTP/1.1
+        Host: $host
+        Authorization: Bearer $authToken
+        User-Agent: Mozilla/5.0 Zoom/5.16.0
+        Content-Type: application/json
+        Accept: application/json
+        Connection: keep-alive
+        
+        
+    """.trimIndent()
+}
+
+// ✅ FaceTime - Apple video calling
+private fun buildFacetimeRequest(host: String, authToken: String): String {
+    return """
+        POST /facetime/ HTTP/1.1
+        Host: $host
+        Authorization: Bearer $authToken
+        User-Agent: FaceTime/1.0 CFNetwork/1404.0.5
+        X-Apple-Client-Application: FaceTime
+        X-Apple-Client-Version: 1.0
+        Content-Type: application/json
+        Accept: application/json
+        Connection: keep-alive
+        
+        
+    """.trimIndent()
+}
+
+// ✅ VK - Russian social network
+private fun buildVkRequest(host: String, authToken: String): String {
+    return """
+        POST /vk/ HTTP/1.1
+        Host: $host
+        Authorization: Bearer $authToken
+        User-Agent: VKAndroidApp/7.26
+        Content-Type: application/json
+        Accept: application/json
+        Connection: keep-alive
+        
+        
+    """.trimIndent()
+}
+
+// ✅ Yandex - Russian services
+private fun buildYandexRequest(host: String, authToken: String): String {
+    return """
+        POST /yandex/ HTTP/1.1
+        Host: $host
+        Authorization: Bearer $authToken
+        User-Agent: Mozilla/5.0 YaBrowser/23.11.0
+        Content-Type: application/json
+        Accept: application/json
+        Connection: keep-alive
+        
+        
+    """.trimIndent()
+}
+
+// ✅ WeChat - Chinese messaging
+private fun buildWechatRequest(host: String, authToken: String): String {
+    return """
+        POST /wechat/ HTTP/1.1
+        Host: $host
+        Authorization: Bearer $authToken
+        User-Agent: MicroMessenger/8.0.37
+        Content-Type: application/json
+        Accept: application/json
+        Connection: keep-alive
+        
+        
+    """.trimIndent()
+}
     
     private fun buildWireGuardConfig(
         privateKey: String,
