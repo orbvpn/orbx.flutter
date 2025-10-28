@@ -209,16 +209,16 @@ private fun startHttpTunnel(protocol: String, serverEndpoint: String, authToken:
             Log.d(TAG, "   Protocol: $protocol")
             Log.d(TAG, "   Server: $serverEndpoint")
             
-            // ✅ Extract hostname and USE PORT 8443 for HTTPS mimicry
+            // Extract hostname and USE PORT 8443 for HTTPS mimicry
             val host = serverEndpoint.split(":")[0]
-            val port = 8443  // ✅ ALWAYS use 8443 for HTTP tunnel
+            val port = 8443  // ALWAYS use 8443 for HTTP tunnel
             
             Log.d(TAG, "🔵 Connecting to $host:$port via TLS")
             
-            // ✅ Use SSLSocket for HTTPS connections
+            // Use SSLSocket for HTTPS connections
             val sslContext = SSLContext.getInstance("TLS")
             
-            // ⚠️ DEVELOPMENT ONLY: Trust all certificates
+            // DEVELOPMENT ONLY: Trust all certificates
             val trustAllCerts = arrayOf<TrustManager>(object : X509TrustManager {
                 override fun checkClientTrusted(chain: Array<X509Certificate>, authType: String) {}
                 override fun checkServerTrusted(chain: Array<X509Certificate>, authType: String) {}
@@ -263,23 +263,38 @@ private fun startHttpTunnel(protocol: String, serverEndpoint: String, authToken:
             var line: String?
 
             // Read HTTP response headers until empty line
-            while (reader.readLine().also { line = it } != null) {
+            var headerCount = 0
+            while (reader.readLine().also { line = it } != null && headerCount < 50) {
+                headerCount++
                 response.append(line).append("\n")
-                if (line?.isEmpty() == true) break
+                Log.d(TAG, "   Response line: $line")
+                if (line?.isEmpty() == true) {
+                    // Empty line indicates end of headers
+                    break
+                }
             }
 
+            val responseStr = response.toString()
             Log.d(TAG, "✅ HTTP tunnel established successfully")
             Log.d(TAG, "   Protocol: $protocol")
-            Log.d(TAG, "   Response: ${response.toString().take(200)}")
+            Log.d(TAG, "   Response: ${responseStr.take(200)}")
+
+            // Check if response was successful
+            if (!responseStr.contains("200 OK") && !responseStr.contains("101 Switching Protocols")) {
+                throw IOException("HTTP tunnel failed: $responseStr")
+            }
+
+            // Keep the socket open for the tunnel
+            Log.d(TAG, "🔵 HTTP tunnel is now open, keeping connection alive...")
             
-        } catch (e: SSLHandshakeException) {
-            Log.e(TAG, "❌ SSL handshake failed", e)
-            httpTunnelSocket?.close()
-            httpTunnelSocket = null
+            // Keep the coroutine alive to maintain the tunnel
+            delay(Long.MAX_VALUE)
+            
         } catch (e: Exception) {
-            Log.e(TAG, "❌ Error starting HTTP tunnel", e)
+            Log.e(TAG, "❌ HTTP tunnel failed", e)
             httpTunnelSocket?.close()
             httpTunnelSocket = null
+            // Don't throw - let WireGuard try direct connection as fallback
         }
     }
 }
