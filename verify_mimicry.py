@@ -19,7 +19,7 @@ SERVER_PORT = "8443"
 BASE_URL = f"https://{SERVER_IP}:{SERVER_PORT}"
 
 # Your JWT token (get from login)
-JWT_TOKEN = ""  # Replace with actual token
+JWT_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoxLCJ1c2VybmFtZSI6ImluZm9Ab3JidnBuLmNvbSIsImVtYWlsIjoiaW5mb0BvcmJ2cG4uY29tIiwic3Vic2NyaXB0aW9uX3RpZXIiOiIxIFllYXIiLCJ0eXBlIjoiYWNjZXNzIiwiaWF0IjoxNzYxNjA0NTU3LCJleHAiOjE3NjI1MDQ1NTd9.ZBweHX3kaxkA9bhDlYw2ZgL-0njZo28LsIEk-u1oQ_0"  # Replace with actual token
 
 
 class ProtocolTester:

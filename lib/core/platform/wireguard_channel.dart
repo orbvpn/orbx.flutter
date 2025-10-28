@@ -2,9 +2,7 @@ import 'package:flutter/services.dart';
 import '../../data/models/wireguard_config.dart';
 
 class WireGuardChannel {
-  static const MethodChannel _channel = MethodChannel(
-    'com.orbvpn.orbx/vpn',
-  );
+  static const MethodChannel _channel = MethodChannel('com.orbvpn.orbx/vpn');
 
   // Generate WireGuard keypair (uses native crypto)
   static Future<Map<String, String>> generateKeypair() async {
@@ -20,8 +18,16 @@ class WireGuardChannel {
   }
 
   // Connect to WireGuard tunnel
+  // ✅ FIXED: Now includes protocol and authToken
   static Future<bool> connect(WireGuardConfig config) async {
     try {
+      print('🔵 WireGuardChannel: Sending connect request to native');
+      print('   Config details:');
+      print('   - serverEndpoint: ${config.serverEndpoint}');
+      print('   - allocatedIp: ${config.allocatedIp}');
+      print('   - dns: ${config.dns}');
+      print('   - mtu: ${config.mtu}');
+
       final result = await _channel.invokeMethod('connect', {
         'configFile': config.toConfigFile(),
         'privateKey': config.privateKey,
@@ -30,9 +36,15 @@ class WireGuardChannel {
         'allocatedIp': config.allocatedIp,
         'dns': config.dns,
         'mtu': config.mtu,
+        // ✅ ADD THESE TWO FIELDS - they're required by Android OrbVpnService
+        'protocol': config.protocol ?? 'http', // Default to 'http' if not set
+        'authToken': config.authToken ?? '', // Default to empty if not set
       });
+
+      print('🔵 WireGuardChannel: Native returned: $result');
       return result as bool;
     } catch (e) {
+      print('❌ WireGuardChannel: Connect failed: $e');
       throw Exception('Failed to connect: $e');
     }
   }

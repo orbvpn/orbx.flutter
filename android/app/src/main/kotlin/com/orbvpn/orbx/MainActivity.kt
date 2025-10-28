@@ -87,7 +87,7 @@ class MainActivity : FlutterActivity() {
     private fun setupVpnStateReceiver() {
         vpnStateReceiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context?, intent: Intent?) {
-                val state = intent?.getStringExtra(OrbVpnService.EXTRA_VPN_STATE) ?: return
+                val state = intent?.getStringExtra(OrbVpnService.EXTRA_STATE) ?: return
                 Log.d(TAG, "📡 Received VPN state broadcast: $state")
                 
                 scope.launch {
@@ -101,7 +101,7 @@ class MainActivity : FlutterActivity() {
         
         LocalBroadcastManager.getInstance(this).registerReceiver(
             vpnStateReceiver!!,
-            IntentFilter(OrbVpnService.ACTION_VPN_STATE_CHANGED)
+            IntentFilter(OrbVpnService.BROADCAST_STATE_CHANGED)
         )
         
         Log.d(TAG, "✅ VPN state receiver registered")

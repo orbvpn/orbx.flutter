@@ -9,6 +9,10 @@ class WireGuardConfig {
   final String serverEndpoint; // IP:Port
   final int persistentKeepalive;
 
+  // ✅ ADD THESE TWO FIELDS
+  final String? protocol; // Mimicry protocol (http, teams, shaparak, etc.)
+  final String? authToken; // Authentication token for HTTP tunnel
+
   const WireGuardConfig({
     required this.privateKey,
     required this.publicKey,
@@ -19,6 +23,9 @@ class WireGuardConfig {
     required this.mtu,
     required this.serverEndpoint,
     this.persistentKeepalive = 25,
+    // ✅ ADD THESE TWO PARAMETERS
+    this.protocol, // Optional, defaults to null
+    this.authToken, // Optional, defaults to null
   });
 
   // Generate WireGuard configuration file format
@@ -49,6 +56,9 @@ PersistentKeepalive = $persistentKeepalive
       'mtu': mtu,
       'serverEndpoint': serverEndpoint,
       'persistentKeepalive': persistentKeepalive,
+      // ✅ ADD THESE TWO FIELDS
+      'protocol': protocol,
+      'authToken': authToken,
     };
   }
 
@@ -63,6 +73,38 @@ PersistentKeepalive = $persistentKeepalive
       mtu: json['mtu'] as int,
       serverEndpoint: json['serverEndpoint'] as String,
       persistentKeepalive: json['persistentKeepalive'] as int? ?? 25,
+      // ✅ ADD THESE TWO FIELDS
+      protocol: json['protocol'] as String?,
+      authToken: json['authToken'] as String?,
+    );
+  }
+
+  // ✅ ADD copyWith method for easy modification
+  WireGuardConfig copyWith({
+    String? privateKey,
+    String? publicKey,
+    String? serverPublicKey,
+    String? allocatedIp,
+    String? gateway,
+    List<String>? dns,
+    int? mtu,
+    String? serverEndpoint,
+    int? persistentKeepalive,
+    String? protocol,
+    String? authToken,
+  }) {
+    return WireGuardConfig(
+      privateKey: privateKey ?? this.privateKey,
+      publicKey: publicKey ?? this.publicKey,
+      serverPublicKey: serverPublicKey ?? this.serverPublicKey,
+      allocatedIp: allocatedIp ?? this.allocatedIp,
+      gateway: gateway ?? this.gateway,
+      dns: dns ?? this.dns,
+      mtu: mtu ?? this.mtu,
+      serverEndpoint: serverEndpoint ?? this.serverEndpoint,
+      persistentKeepalive: persistentKeepalive ?? this.persistentKeepalive,
+      protocol: protocol ?? this.protocol,
+      authToken: authToken ?? this.authToken,
     );
   }
 }
