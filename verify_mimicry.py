@@ -1,228 +1,269 @@
 #!/usr/bin/env python3
 """
-OrbX Protocol Mimicry Test - Proper Format
-Tests protocols with correct headers and payloads
+OrbX Protocol Mimicry Verification
+Tests protocol handlers with proper TLS configuration
 """
 
 import requests
 import json
 import base64
-import time
-from urllib3.exceptions import InsecureRequestWarning
-requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
+import urllib3
+from typing import Dict, Tuple
 
+# Disable SSL warnings
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+# Server configuration
 SERVER_IP = "172.191.139.108"
-SERVER_PORT = 8443
-JWT_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoxLCJ1c2VybmFtZSI6ImluZm9Ab3JidnBuLmNvbSIsImVtYWlsIjoiaW5mb0BvcmJ2cG4uY29tIiwic3Vic2NyaXB0aW9uX3RpZXIiOiIxIFllYXIiLCJ0eXBlIjoiYWNjZXNzIiwiaWF0IjoxNzYxNTg5ODA5LCJleHAiOjE3NjI0ODk4MDl9.9y0uNph5NaCRs2bOwA0skSzgwl3DpFod277tO-PfgGQ"
+SERVER_PORT = "8443"
+BASE_URL = f"https://{SERVER_IP}:{SERVER_PORT}"
 
-print("🔬 OrbX Protocol Mimicry Test - Proper Format")
-print("=" * 60)
-print(f"Server: {SERVER_IP}:{SERVER_PORT}\n")
+# Your JWT token (get from login)
+JWT_TOKEN = ""  # Replace with actual token
 
-def test_teams_protocol():
-    """Test Microsoft Teams protocol with proper headers and payload"""
-    print("\n━━━ Testing Microsoft Teams Protocol ━━━")
-    
-    # Teams-like payload
-    payload = {
-        "type": "message",
-        "content": base64.b64encode(b"TEST_VPN_DATA").decode(),
-        "timestamp": int(time.time()),
-        "clientId": "teams-client-12345"
-    }
-    
-    # Teams-specific headers
-    headers = {
-        "Authorization": f"Bearer {JWT_TOKEN}",
-        "User-Agent": "Mozilla/5.0 Teams/1.5.00.32283",
-        "Content-Type": "application/json",
-        "X-Ms-Client-Version": "27/1.0.0.2024",  # ← CRITICAL!
-        "X-Ms-Session-Id": f"session-{int(time.time())}"
-    }
-    
-    try:
-        response = requests.post(
-            f"https://{SERVER_IP}:{SERVER_PORT}/teams/messages",
-            headers=headers,
-            json=payload,
-            timeout=10,
-            verify=False
-        )
+
+class ProtocolTester:
+    def __init__(self, server_url: str, jwt_token: str):
+        self.server_url = server_url
+        self.jwt_token = jwt_token
         
-        print(f"Status: HTTP {response.status_code}")
-        if response.status_code == 200:
-            print("✅ PASS - Teams mimicry working!")
-            print(f"Response: {response.text[:200]}")
-        else:
-            print(f"❌ FAIL - {response.text}")
+        # Create session with proper TLS configuration
+        self.session = requests.Session()
+        self.session.verify = False
+        
+        # Configure retry strategy
+        adapter = requests.adapters.HTTPAdapter(
+            max_retries=0,  # No retries for testing
+            pool_connections=10,
+            pool_maxsize=10
+        )
+        self.session.mount('https://', adapter)
+        self.session.mount('http://', adapter)
+
+    def test_teams(self) -> Tuple[int, str]:
+        """Test Microsoft Teams protocol"""
+        print("━━━ Testing Microsoft Teams Protocol ━━━")
+        
+        url = f"{self.server_url}/teams/messages"
+        
+        # Create proper Teams-like payload
+        payload = {
+            "type": "message",
+            "content": base64.b64encode(b"TEST_PACKET_DATA").decode(),
+            "timestamp": 1730000000,
+            "clientId": "orbx-test-client"
+        }
+        
+        headers = {
+            "Authorization": f"Bearer {self.jwt_token}",
+            "Content-Type": "application/json",
+            "User-Agent": "Mozilla/5.0 Teams/1.5.00.32283",
+            "X-Ms-Client-Version": "1.5.00.32283"
+        }
+        
+        try:
+            response = self.session.post(
+                url,
+                json=payload,
+                headers=headers,
+                timeout=10
+            )
             
-        return response.status_code == 200
-    except Exception as e:
-        print(f"❌ ERROR: {e}")
-        return False
-
-def test_doh_protocol():
-    """Test DNS over HTTPS protocol"""
-    print("\n━━━ Testing DNS over HTTPS Protocol ━━━")
-    
-    # DoH query (base64url encoded)
-    dns_query = base64.b64encode(b"TEST_DNS_QUERY").decode()
-    
-    headers = {
-        "Authorization": f"Bearer {JWT_TOKEN}",
-        "User-Agent": "Mozilla/5.0",
-        "Accept": "application/dns-message"
-    }
-    
-    try:
-        # Test GET method
-        response = requests.get(
-            f"https://{SERVER_IP}:{SERVER_PORT}/dns-query",
-            params={"dns": dns_query},
-            headers=headers,
-            timeout=10,
-            verify=False
-        )
-        
-        print(f"Status (GET): HTTP {response.status_code}")
-        
-        # Test POST method
-        headers["Content-Type"] = "application/dns-message"
-        response_post = requests.post(
-            f"https://{SERVER_IP}:{SERVER_PORT}/dns-query",
-            headers=headers,
-            data=b"TEST_DNS_QUERY",
-            timeout=10,
-            verify=False
-        )
-        
-        print(f"Status (POST): HTTP {response_post.status_code}")
-        
-        if response.status_code == 200 or response_post.status_code == 200:
-            print("✅ PASS - DoH mimicry working!")
-            return True
-        else:
-            print(f"❌ FAIL - GET: {response.text}, POST: {response_post.text}")
-            return False
+            print(f"Status: HTTP {response.status_code}")
             
-    except Exception as e:
-        print(f"❌ ERROR: {e}")
-        return False
+            if response.status_code == 200:
+                print("✅ PASS - Protocol working")
+                return response.status_code, "Success"
+            else:
+                print(f"❌ FAIL - HTTP {response.status_code}")
+                print(f"Response: {response.text[:200]}")
+                return response.status_code, f"HTTP {response.status_code}"
+                
+        except requests.exceptions.SSLError as e:
+            print(f"❌ FAIL - SSL Error: {str(e)[:100]}")
+            return 0, "SSL Error"
+        except requests.exceptions.ConnectionError as e:
+            print(f"❌ FAIL - Connection Error: {str(e)[:100]}")
+            return 0, "Connection Error"
+        except Exception as e:
+            print(f"❌ FAIL - {type(e).__name__}: {str(e)[:100]}")
+            return 0, str(e)
 
-def test_google_protocol():
-    """Test Google Workspace protocol"""
-    print("\n━━━ Testing Google Workspace Protocol ━━━")
-    
-    # Google-like payload
-    payload = {
-        "kind": "workspace#drive",
-        "data": base64.b64encode(b"TEST_DRIVE_DATA").decode(),
-        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "requestId": f"req_{int(time.time())}"
-    }
-    
-    headers = {
-        "Authorization": f"Bearer {JWT_TOKEN}",
-        "User-Agent": "Mozilla/5.0 Chrome/120.0.0.0",
-        "Content-Type": "application/json",
-        "X-Goog-Api-Client": "gl-go/1.20.0 gdcl/0.110.0",
-        "X-Goog-Request-Id": f"req-{int(time.time())}"
-    }
-    
-    try:
-        response = requests.post(
-            f"https://{SERVER_IP}:{SERVER_PORT}/google/drive/files",
-            headers=headers,
-            json=payload,
-            timeout=10,
-            verify=False
-        )
+    def test_google(self) -> Tuple[int, str]:
+        """Test Google Workspace protocol"""
+        print("━━━ Testing Google Workspace Protocol ━━━")
         
-        print(f"Status: HTTP {response.status_code}")
-        if response.status_code == 200:
-            print("✅ PASS - Google mimicry working!")
-            print(f"Response: {response.text[:200]}")
-        else:
-            print(f"❌ FAIL - {response.text}")
-            
-        return response.status_code == 200
-    except Exception as e:
-        print(f"❌ ERROR: {e}")
-        return False
-
-def test_shaparak_protocol():
-    """Test Shaparak Banking protocol (Iran)"""
-    print("\n━━━ Testing Shaparak Banking Protocol ━━━")
-    
-    # Shaparak-like SOAP payload
-    soap_payload = """<?xml version="1.0" encoding="UTF-8"?>
-<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
-    <soap:Body>
-        <ProcessTransaction>
-            <Amount>50000</Amount>
-            <MerchantID>123456</MerchantID>
-            <Data>{}</Data>
-        </ProcessTransaction>
-    </soap:Body>
-</soap:Envelope>""".format(base64.b64encode(b"TEST_TRANSACTION_DATA").decode())
-    
-    headers = {
-        "Authorization": f"Bearer {JWT_TOKEN}",
-        "User-Agent": "ShaparakClient/2.0",
-        "Content-Type": "text/xml; charset=utf-8",
-        "SOAPAction": "ProcessTransaction"
-    }
-    
-    try:
-        response = requests.post(
-            f"https://{SERVER_IP}:{SERVER_PORT}/shaparak/transaction",
-            headers=headers,
-            data=soap_payload,
-            timeout=10,
-            verify=False
-        )
+        url = f"{self.server_url}/google/drive/files"
         
-        print(f"Status: HTTP {response.status_code}")
-        if response.status_code == 200:
-            print("✅ PASS - Shaparak mimicry working!")
-            print(f"Response: {response.text[:200]}")
-        else:
-            print(f"❌ FAIL - {response.text}")
+        payload = {
+            "kind": "drive#file",
+            "data": base64.b64encode(b"TEST_PACKET_DATA").decode(),
+            "timestamp": "2025-10-27T22:00:00Z",
+            "requestId": "req_1730000000"
+        }
+        
+        headers = {
+            "Authorization": f"Bearer {self.jwt_token}",
+            "Content-Type": "application/json",
+            "User-Agent": "com.google.Drive/5.13.23",
+            "X-Goog-Api-Client": "gl-dart/2.19"
+        }
+        
+        try:
+            response = self.session.post(
+                url,
+                json=payload,
+                headers=headers,
+                timeout=10
+            )
             
-        return response.status_code == 200
-    except Exception as e:
-        print(f"❌ ERROR: {e}")
-        return False
+            print(f"Status: HTTP {response.status_code}")
+            
+            if response.status_code == 200:
+                print("✅ PASS - Protocol working")
+                return response.status_code, "Success"
+            else:
+                print(f"❌ FAIL - HTTP {response.status_code}")
+                return response.status_code, f"HTTP {response.status_code}"
+                
+        except Exception as e:
+            print(f"❌ FAIL - {type(e).__name__}: {str(e)[:100]}")
+            return 0, str(e)
 
-# Run all tests
-results = {
-    "Teams": test_teams_protocol(),
-    "DoH": test_doh_protocol(),
-    "Google": test_google_protocol(),
-    "Shaparak": test_shaparak_protocol()
-}
+    def test_shaparak(self) -> Tuple[int, str]:
+        """Test Shaparak Banking protocol"""
+        print("━━━ Testing Shaparak Banking Protocol ━━━")
+        
+        url = f"{self.server_url}/shaparak/transaction"
+        
+        payload = {
+            "transactionType": "payment",
+            "amount": "50000",
+            "merchantId": "123456",
+            "data": base64.b64encode(b"TEST_PACKET_DATA").decode(),
+            "timestamp": 1730000000
+        }
+        
+        headers = {
+            "Authorization": f"Bearer {self.jwt_token}",
+            "Content-Type": "application/json",
+            "User-Agent": "Shaparak/Android/2.0"
+        }
+        
+        try:
+            response = self.session.post(
+                url,
+                json=payload,
+                headers=headers,
+                timeout=10
+            )
+            
+            print(f"Status: HTTP {response.status_code}")
+            
+            if response.status_code == 200:
+                print("✅ PASS - Protocol working")
+                return response.status_code, "Success"
+            else:
+                print(f"❌ FAIL - HTTP {response.status_code}")
+                return response.status_code, f"HTTP {response.status_code}"
+                
+        except Exception as e:
+            print(f"❌ FAIL - {type(e).__name__}: {str(e)[:100]}")
+            return 0, str(e)
 
-# Summary
-print("\n" + "=" * 60)
-print("📊 Test Summary")
-print("=" * 60)
+    def test_doh(self) -> Tuple[int, str]:
+        """Test DNS over HTTPS protocol"""
+        print("━━━ Testing DNS over HTTPS Protocol ━━━")
+        
+        url = f"{self.server_url}/dns-query"
+        
+        # DoH expects raw DNS message in body
+        test_dns_query = base64.b64encode(b"TEST_DNS_QUERY").decode()
+        
+        headers = {
+            "Authorization": f"Bearer {self.jwt_token}",
+            "Content-Type": "application/dns-message",
+            "User-Agent": "Mozilla/5.0"
+        }
+        
+        try:
+            # Test POST
+            response = self.session.post(
+                url,
+                data=base64.b64decode(test_dns_query),
+                headers=headers,
+                timeout=10
+            )
+            
+            print(f"Status (POST): HTTP {response.status_code}")
+            
+            if response.status_code == 200:
+                print("✅ PASS - Protocol working")
+                return response.status_code, "Success"
+            else:
+                print(f"❌ FAIL - HTTP {response.status_code}")
+                return response.status_code, f"HTTP {response.status_code}"
+                
+        except Exception as e:
+            print(f"❌ FAIL - {type(e).__name__}: {str(e)[:100]}")
+            return 0, str(e)
 
-passed = sum(1 for v in results.values() if v)
-total = len(results)
 
-for protocol, passed_test in results.items():
-    status = "✅ PASS" if passed_test else "❌ FAIL"
-    print(f"  {protocol:15s} {status}")
+def main():
+    print("🔬 OrbX Protocol Mimicry Test - Proper Format")
+    print("=" * 60)
+    print(f"Server: {SERVER_IP}:{SERVER_PORT}")
+    print()
+    
+    if JWT_TOKEN == "YOUR_JWT_TOKEN_HERE":
+        print("⚠️  ERROR: Please set your JWT token in the script!")
+        print("   Get token from: Login to OrbX app → Copy from logs")
+        return
+    
+    tester = ProtocolTester(BASE_URL, JWT_TOKEN)
+    
+    results = {}
+    
+    # Test each protocol
+    results['Teams'] = tester.test_teams()
+    print()
+    
+    results['Google'] = tester.test_google()
+    print()
+    
+    results['Shaparak'] = tester.test_shaparak()
+    print()
+    
+    results['DoH'] = tester.test_doh()
+    print()
+    
+    # Summary
+    print("=" * 60)
+    print("📊 Test Summary")
+    print("=" * 60)
+    
+    passed = 0
+    total = len(results)
+    
+    for protocol, (status, msg) in results.items():
+        if status == 200:
+            print(f"  {protocol:15} ✅ PASS")
+            passed += 1
+        else:
+            print(f"  {protocol:15} ❌ FAIL")
+    
+    print(f"\nSuccess Rate: {passed}/{total} ({100*passed/total:.1f}%)")
+    
+    if passed == 0:
+        print("\n⚠️  No protocols passing. Check:")
+        print("  1. JWT token is correct and not expired")
+        print("  2. Server is accessible: curl -k https://" + SERVER_IP + ":8443/health")
+        print("  3. Check server logs: ssh azureuser@" + SERVER_IP + " 'docker logs orbx-server'")
+    
+    print("\n💡 Note: The test scripts are simplified.")
+    print("   Your Flutter app sends even better formatted requests!")
+    print("   Test with your actual phone for best results.")
 
-print(f"\nSuccess Rate: {passed}/{total} ({passed/total*100:.1f}%)")
 
-if passed == total:
-    print("\n🎉 Perfect! All protocols working with proper mimicry!")
-elif passed > 0:
-    print("\n✓ Some protocols working. This is normal - test with your phone app!")
-else:
-    print("\n⚠️  No protocols passing. Check server logs.")
-
-print("\n💡 Note: The test scripts are simplified.")
-print("   Your Flutter app sends even better formatted requests!")
-print("   Test with your actual phone for best results.")
+if __name__ == "__main__":
+    main()
