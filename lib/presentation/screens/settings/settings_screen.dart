@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/theme_provider.dart';
 import '../../../core/constants/mimicry_protocols.dart';
+import '../../../core/platform/wireguard_channel.dart';
 import 'widgets/setting_tile.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -15,8 +16,26 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _autoConnect = false;
   bool _killSwitch = false;
+  bool _smartConnect = true; // Default: ON
   MimicryProtocol _defaultProtocol = MimicryProtocol.teams;
   String _selectedLanguage = 'English';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSmartConnectStatus();
+  }
+
+  Future<void> _loadSmartConnectStatus() async {
+    try {
+      final enabled = await WireGuardChannel.isSmartConnectEnabled();
+      setState(() {
+        _smartConnect = enabled;
+      });
+    } catch (e) {
+      print('Failed to load Smart Connect status: $e');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -80,6 +99,48 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 _killSwitch = value;
               });
               // TODO: Save preference
+            },
+          ),
+
+          SwitchListTile(
+            secondary: const Icon(Icons.smart_toy),
+            title: const Text('Smart Connect'),
+            subtitle: Text(
+              _smartConnect
+                  ? 'Automatically find best protocol (10 protocols available)'
+                  : 'Using default HTTPS protocol only',
+            ),
+            value: _smartConnect,
+            onChanged: (value) async {
+              try {
+                await WireGuardChannel.setSmartConnectEnabled(value);
+                setState(() {
+                  _smartConnect = value;
+                });
+
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        value
+                            ? 'Smart Connect enabled - will try multiple protocols'
+                            : 'Smart Connect disabled - using HTTPS only',
+                      ),
+                      duration: const Duration(seconds: 2),
+                    ),
+                  );
+                }
+              } catch (e) {
+                print('Failed to set Smart Connect: $e');
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Failed to update Smart Connect setting'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              }
             },
           ),
 

@@ -101,4 +101,33 @@ class WireGuardChannel {
       }
     });
   }
+
+  // Smart Connect - Enable/Disable automatic protocol fallback
+  static Future<void> setSmartConnectEnabled(bool enabled) async {
+    try {
+      await _channel.invokeMethod('setSmartConnect', {'enabled': enabled});
+    } catch (e) {
+      throw Exception('Failed to set Smart Connect: $e');
+    }
+  }
+
+  // Smart Connect - Check if enabled
+  static Future<bool> isSmartConnectEnabled() async {
+    try {
+      final result = await _channel.invokeMethod('isSmartConnectEnabled');
+      return result as bool;
+    } catch (e) {
+      throw Exception('Failed to get Smart Connect status: $e');
+    }
+  }
+
+  // Smart Connect - Get protocol statistics
+  static Future<Map<String, dynamic>> getProtocolStats(String server) async {
+    try {
+      final result = await _channel.invokeMethod('getProtocolStats', {'server': server});
+      return Map<String, dynamic>.from(result);
+    } catch (e) {
+      throw Exception('Failed to get protocol stats: $e');
+    }
+  }
 }

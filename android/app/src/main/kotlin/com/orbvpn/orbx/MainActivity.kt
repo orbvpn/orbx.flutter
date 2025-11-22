@@ -381,7 +381,58 @@ class MainActivity : FlutterActivity() {
                         result.error("PROTOCOLS_ERROR", e.message, null)
                     }
                 }
-                
+
+                // Smart Connect - Enable/Disable
+                "setSmartConnect" -> {
+                    try {
+                        val enabled = call.argument<Boolean>("enabled") ?: true
+                        val protocolManager = ProtocolManager(applicationContext)
+                        protocolManager.setSmartConnectEnabled(enabled)
+                        result.success(null)
+                        Log.d(TAG, "Smart Connect ${if (enabled) "enabled" else "disabled"}")
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to set Smart Connect", e)
+                        result.error("SMART_CONNECT_ERROR", e.message, null)
+                    }
+                }
+
+                // Smart Connect - Get Status
+                "isSmartConnectEnabled" -> {
+                    try {
+                        val protocolManager = ProtocolManager(applicationContext)
+                        val enabled = protocolManager.isSmartConnectEnabled()
+                        result.success(enabled)
+                        Log.d(TAG, "Smart Connect status: $enabled")
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to get Smart Connect status", e)
+                        result.error("SMART_CONNECT_ERROR", e.message, null)
+                    }
+                }
+
+                // Smart Connect - Get Protocol Statistics
+                "getProtocolStats" -> {
+                    try {
+                        val server = call.argument<String>("server") ?: ""
+                        val protocolManager = ProtocolManager(applicationContext)
+                        val stats = mutableMapOf<String, Any>()
+
+                        protocolManager.getAllProtocolIds().forEach { protocolId ->
+                            val protocolStats = protocolManager.getProtocolStats(server, protocolId)
+                            stats[protocolId] = mapOf(
+                                "successCount" to protocolStats.successCount,
+                                "failureCount" to protocolStats.failureCount,
+                                "successRate" to protocolStats.successRate
+                            )
+                        }
+
+                        result.success(stats)
+                        Log.d(TAG, "Protocol stats retrieved for server: $server")
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to get protocol stats", e)
+                        result.error("STATS_ERROR", e.message, null)
+                    }
+                }
+
                 // Unknown method
                 else -> {
                     Log.w(TAG, "Unknown method: ${call.method}")

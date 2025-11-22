@@ -24,12 +24,14 @@ import javax.net.ssl.SSLSocket
  */
 class LocalUdpProxy(
     private val httpsTunnelSocket: SSLSocket,
-    private val scope: CoroutineScope
+    private val scope: CoroutineScope,
+    private val onTunnelFailure: () -> Unit = {}
 ) {
     private val TAG = "LocalUdpProxy"
 
     private var udpSocket: DatagramSocket? = null
     private var isRunning = false
+    private var tunnelFailed = false
 
     // WireGuard will connect to this local address
     private val LOCAL_IP = "127.0.0.1"
@@ -117,7 +119,17 @@ class LocalUdpProxy(
 
             } catch (e: Exception) {
                 if (isRunning) {
-                    Log.e(TAG, "❌ Error forwarding UDP → HTTPS", e)
+                    Log.e(TAG, "❌ Error forwarding UDP → HTTPS: ${e.message}")
+
+                    // Check if this is a socket error (broken pipe, connection reset, etc.)
+                    if (e is java.net.SocketException || e is java.io.IOException) {
+                        Log.e(TAG, "🔴 HTTPS tunnel socket failed, triggering reconnection")
+                        isRunning = false
+                        tunnelFailed = true
+                        onTunnelFailure()
+                        break
+                    }
+
                     delay(100) // Backoff on error
                 }
             }
@@ -139,8 +151,10 @@ class LocalUdpProxy(
                 // Read raw packet from HTTPS tunnel (no length prefix)
                 val n = httpsTunnelSocket.inputStream.read(buffer)
                 if (n == -1) {
-                    Log.w(TAG, "⚠️ HTTPS tunnel closed by server")
+                    Log.e(TAG, "🔴 HTTPS tunnel closed by server, triggering reconnection")
                     isRunning = false
+                    tunnelFailed = true
+                    onTunnelFailure()
                     break
                 }
 
@@ -170,7 +184,17 @@ class LocalUdpProxy(
 
             } catch (e: Exception) {
                 if (isRunning) {
-                    Log.e(TAG, "❌ Error forwarding HTTPS → UDP", e)
+                    Log.e(TAG, "❌ Error forwarding HTTPS → UDP: ${e.message}")
+
+                    // Check if this is a socket error (broken pipe, connection reset, etc.)
+                    if (e is java.net.SocketException || e is java.io.IOException) {
+                        Log.e(TAG, "🔴 HTTPS tunnel socket failed, triggering reconnection")
+                        isRunning = false
+                        tunnelFailed = true
+                        onTunnelFailure()
+                        break
+                    }
+
                     delay(100) // Backoff on error
                 }
             }
@@ -209,6 +233,16 @@ class LocalUdpProxy(
         Log.d(TAG, "═══════════════════════════════════════")
         Log.d(TAG, "✅ Local UDP proxy stopped")
     }
+
+    /**
+     * Get packets sent to server (for traffic monitoring)
+     */
+    fun getPacketsToServer(): Long = packetsToServer
+
+    /**
+     * Get packets received from server (for traffic monitoring)
+     */
+    fun getPacketsFromServer(): Long = packetsFromServer
 
     /**
      * Format bytes for display
