@@ -31,6 +31,7 @@ class WireGuardChannel {
       final result = await _channel.invokeMethod('connect', {
         'configFile': config.toConfigFile(),
         'privateKey': config.privateKey,
+        'publicKey': config.publicKey, // ✅ Add client's public key for tunnel registration
         'serverPublicKey': config.serverPublicKey,
         'serverEndpoint': config.serverEndpoint,
         'allocatedIp': config.allocatedIp,
