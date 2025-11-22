@@ -8,10 +8,10 @@ class ProtocolSelector extends StatelessWidget {
   final Function(String) onProtocolChanged;
 
   const ProtocolSelector({
-    Key? key,
+    super.key,
     required this.selectedProtocol,
     required this.onProtocolChanged,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

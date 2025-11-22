@@ -6,5 +6,6 @@
       "default": true
     }
   ],
-  "java.home": "/Library/Java/JavaVirtualMachines/openjdk-17.jdk/Contents/Home"
+  "java.home": "/Library/Java/JavaVirtualMachines/openjdk-17.jdk/Contents/Home",
+  "cmake.sourceDirectory": "/Users/nima/Developments/orbx.flutter/linux"
 }

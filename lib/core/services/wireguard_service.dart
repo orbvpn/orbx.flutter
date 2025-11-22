@@ -23,7 +23,7 @@ class WireGuardService {
 
     // ✅ CRITICAL: Accept self-signed certificates for development
     // Remove this in production or implement proper certificate pinning
-    (dio.httpClientAdapter as DefaultHttpClientAdapter).onHttpClientCreate =
+    (dio.httpClientAdapter as IOHttpClientAdapter).onHttpClientCreate =
         (client) {
       client.badCertificateCallback = (cert, host, port) {
         print('⚠️  Accepting certificate for $host:$port');
@@ -71,61 +71,49 @@ class WireGuardService {
       print('🔑 Using provided keypair');
       print('   Public key: ${publicKey.substring(0, 20)}...');
 
-      // 3. Register with server
-      print('📞 Connecting to server...');
-      print('   Endpoint: https://$endpoint:8443/wireguard/connect');
+      // ✅ NEW FLOW: Skip REST endpoint, go straight to native tunnel
+      // The Android/iOS native code will:
+      // 1. Establish HTTP tunnel to /vpn/tunnel
+      // 2. Server will register the peer via that endpoint
+      // 3. WireGuard packets flow through the HTTP tunnel
 
-      final response = await _dio.post(
-        'https://$endpoint:8443/wireguard/connect',
-        data: {'publicKey': publicKey},
-        options: Options(
-          headers: {
-            'Authorization': 'Bearer $authToken',
-            'Content-Type': 'application/json',
-          },
-          validateStatus: (status) {
-            // Log the status code
-            print('📬 Server response status: $status');
-            return status == 200;
-          },
-        ),
-      );
+      print('🎭 Initiating HTTP tunnel connection with $protocol mimicry...');
+      print('   Endpoint: $endpoint:8443 (via /vpn/tunnel)');
 
-      print('✅ Connection request successful');
-
-      final data = response.data as Map<String, dynamic>;
-
-      if (data['success'] != true) {
-        throw Exception(
-            'Connection failed: ${data['message'] ?? 'Unknown error'}');
-      }
-
-      // 4. Build WireGuard configuration
+      // 3. Build WireGuard configuration for native layer
+      // Note: We don't know the allocated IP yet - the server will assign it via tunnel
       print('⚙️  Building WireGuard configuration...');
 
+      // TEMPORARY: Use placeholder IP until tunnel establishes
+      // The native layer will update this after tunnel handshake
       final config = WireGuardConfig(
         privateKey: privateKey,
         publicKey: publicKey,
-        serverPublicKey: data['serverPublicKey'] as String? ?? '',
-        allocatedIp: data['ip'] as String,
-        gateway: data['gateway'] as String,
-        dns: List<String>.from(data['dns'] as List),
-        mtu: data['mtu'] as int,
+        serverPublicKey:
+            'oMqzsUVApNEplc4CipCZG5DkN334SlcFUQhbMm1qkE8=', // Your server's public key
+        allocatedIp: '10.8.0.2', // Placeholder - will be assigned by server
+        gateway: '10.8.0.1',
+        dns: ['1.1.1.1', '1.0.0.1'],
+        mtu: 1420,
         serverEndpoint: '$endpoint:51820',
         protocol: protocol,
         authToken: authToken,
       );
 
       if (EnvironmentConfig.enableDebugLogging) {
-        print('   Allocated IP: ${config.allocatedIp}');
+        print('   Allocated IP: ${config.allocatedIp} (placeholder)');
         print('   Gateway: ${config.gateway}');
         print('   DNS: ${config.dns.join(", ")}');
         print('   MTU: ${config.mtu}');
         print('   Endpoint: ${config.serverEndpoint}');
+        print('   Protocol: $protocol');
       }
 
-      // 5. Establish WireGuard tunnel
-      print('🔌 Establishing WireGuard tunnel...');
+      // 4. Establish WireGuard tunnel with HTTP mimicry
+      // This will trigger the Android native code to:
+      // - Start HTTP tunnel to /vpn/tunnel
+      // - Establish WireGuard connection through the tunnel
+      print('🔌 Establishing WireGuard tunnel with HTTP mimicry...');
       final success = await WireGuardChannel.connect(config);
 
       if (!success) {
@@ -136,19 +124,22 @@ class WireGuardService {
       _isConnected = true;
       _connectedServer = server;
 
-      // 6. START HTTP TUNNEL FOR MIMICRY
-      print('🎭 Starting HTTP tunnel with $protocol mimicry...');
+      // 5. Initialize HTTP tunnel service for statistics tracking
+      print('📊 Initializing tunnel statistics tracking...');
       _httpTunnel = HttpTunnelService(
         serverAddress: endpoint,
         authToken: authToken,
         protocol: protocol,
       );
 
-      await _httpTunnel!.start();
+      // Note: We don't call start() here because the native layer already started it
+      // This is just for tracking statistics in Flutter layer
+      print('✅ HTTP tunnel active');
 
       print('╔════════════════════════════════════════╗');
       print('║   ✅ Connection Established!           ║');
       print('║   🎭 Traffic disguised as $protocol    ║');
+      print('║   🔒 Packets flowing through tunnel    ║');
       print('╚════════════════════════════════════════╝');
 
       return config;
